@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaaS Dashboard — Full Feature Overview v6.2</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 18mm 16mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+    color: #1e293b;
+    background: #fff;
+    line-height: 1.65;
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Cover Header ── */
+  .cover {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1e40af 100%);
+    color: #fff;
+    padding: 44px 48px 36px;
+    page-break-after: avoid;
+    border-radius: 0 0 12px 12px;
+  }
+  .cover h1 {
+    font-size: 32pt;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+  .cover h1 span { color: #93c5fd; font-weight: 400; font-size: 22pt; }
+  .cover .subtitle {
+    font-size: 13pt;
+    color: rgba(255,255,255,.75);
+    margin-top: 6px;
+    font-weight: 400;
+  }
+  .cover .version {
+    display: inline-block;
+    background: rgba(255,255,255,.18);
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 10pt;
+    font-weight: 600;
+    margin-top: 10px;
+    letter-spacing: .5px;
+  }
+  .cover .meta {
+    margin-top: 14px;
+    font-size: 10pt;
+    color: rgba(255,255,255,.6);
+  }
+
+  /* ── Sections ── */
+  .content { padding: 32px 44px; }
+  h2 {
+    font-size: 17pt;
+    font-weight: 800;
+    color: #0f172a;
+    border-bottom: 3px solid #3b82f6;
+    padding-bottom: 6px;
+    margin: 30px 0 16px 0;
+    page-break-after: avoid;
+    letter-spacing: -.3px;
+  }
+  h2:first-child { margin-top: 0; }
+  h3 {
+    font-size: 13pt;
+    font-weight: 700;
+    margin: 18px 0 8px 0;
+    page-break-after: avoid;
+  }
+  .platform-hdr {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin: 22px 0 10px 0;
+    page-break-after: avoid;
+    font-size: 13pt;
+    font-weight: 800;
+    letter-spacing: .3px;
+  }
+  .platform-hdr .icon { font-size: 18pt; }
+
+  /* ── Feature cards ── */
+  .feat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .feat-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    page-break-inside: avoid;
+    background: #f8fafc;
+  }
+  .feat-card .title {
+    font-weight: 700;
+    font-size: 11pt;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feat-card .title .ic {
+    font-size: 15pt;
+    flex-shrink: 0;
+  }
+  .feat-card ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 9.5pt;
+    color: #334155;
+  }
+  .feat-card ul li {
+    margin-bottom: 2px;
+  }
+
+  /* ── Wide card (single col) ── */
+  .feat-wide {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 18px;
+    page-break-inside: avoid;
+    background: #f8fafc;
+    margin-bottom: 10px;
+  }
+  .feat-wide .title {
+    font-weight: 700;
+    font-size: 11pt;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .feat-wide ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 9.5pt;
+    color: #334155;
+    columns: 2;
+    column-gap: 28px;
+  }
+  .feat-wide ul li { margin-bottom: 2px; break-inside: avoid; }
+
+  /* ── Table ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 16px 0;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #1e293b;
+    color: #fff;
+    font-weight: 700;
+    font-size: 9.5pt;
+    letter-spacing: .3px;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+
+  /* ── KPI banner ── */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .kpi {
+    text-align: center;
+    padding: 16px 10px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    page-break-inside: avoid;
+  }
+  .kpi .num {
+    font-size: 22pt;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+  .kpi .lab {
+    font-size: 9pt;
+    color: #64748b;
+    margin-top: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+
+  /* ── Contact cards ── */
+  .contact-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin: 14px 0 20px 0;
+  }
+  .contact-card {
+    border-radius: 10px;
+    padding: 18px 16px;
+    page-break-inside: avoid;
+    text-align: center;
+  }
+  .contact-card .name {
+    font-size: 12pt;
+    font-weight: 800;
+    margin-bottom: 2px;
+  }
+  .contact-card .role {
+    font-size: 9.5pt;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .contact-card .email {
+    font-size: 9pt;
+    color: #3b82f6;
+    word-break: break-all;
+  }
+  .contact-card .avatar {
+    font-size: 28pt;
+    margin-bottom: 6px;
+  }
+
+  /* ── Highlights list ── */
+  .highlights {
+    columns: 2;
+    column-gap: 28px;
+    padding-left: 18px;
+    font-size: 10pt;
+    color: #334155;
+    margin: 6px 0 14px 0;
+  }
+  .highlights li { margin-bottom: 4px; break-inside: avoid; }
+
+  /* ── Footer ── */
+  .footer {
+    border-top: 2px solid #e2e8f0;
+    padding: 18px 44px;
+    font-size: 9pt;
+    color: #94a3b8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer strong { color: #475569; }
+
+  /* ── Accent borders ── */
+  .bl-blue   { border-left: 4px solid #3b82f6; }
+  .bl-red    { border-left: 4px solid #ef4444; }
+  .bl-green  { border-left: 4px solid #22c55e; }
+  .bl-orange { border-left: 4px solid #f97316; }
+  .bl-aws    { border-left: 4px solid #FF9900; }
+  .bl-hv     { border-left: 4px solid #00ADEF; }
+  .bl-purple { border-left: 4px solid #8b5cf6; }
+  .bl-cyan   { border-left: 4px solid #06b6d4; }
+  .bl-indigo { border-left: 4px solid #6366f1; }
+  .bl-sky    { border-left: 4px solid #0ea5e9; }
+  .bl-gray   { border-left: 4px solid #64748b; }
+
+  @media print {
+    body { font-size: 10pt; }
+    .cover { border-radius: 0; }
+    .content { padding: 24px 32px; }
+    .footer { padding: 14px 32px; }
+    .kpi-row { gap: 8px; }
+    .feat-grid { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- COVER HEADER                                                          -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <h1>L<span>aaS</span> Dashboard</h1>
+  <div class="subtitle">Lab as a Service &mdash; Unified Multi-Platform Infrastructure Portal</div>
+  <div class="version">Version 6.2 &nbsp;&middot;&nbsp; March 2026</div>
+  <div class="meta">Wipro Limited &nbsp;&middot;&nbsp; SDX Infrastructure &amp; Data Centre Operations &nbsp;&middot;&nbsp; Confidential</div>
+</div>
+
+<div class="content">
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 1. EXECUTIVE SUMMARY                                                   -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>1. Executive Summary</h2>
+
+<p style="margin-bottom:12px;">
+  <strong>LaaS (Lab as a Service)</strong> is a unified, self-service web portal that consolidates the management
+  of <strong>eight enterprise infrastructure platforms</strong> into a single browser-based interface. Built by the
+  Wipro SDX Infrastructure &amp; Data Centre team, it eliminates the need for engineers and managers to access
+  individual platform consoles, enforcing role-based governance while dramatically accelerating day-to-day operations.
+</p>
+
+<div class="kpi-row">
+  <div class="kpi" style="background:#eff6ff; border-color:#bfdbfe;">
+    <div class="num" style="color:#2563eb;">8</div>
+    <div class="lab">Platforms Integrated</div>
+  </div>
+  <div class="kpi" style="background:#f0fdf4; border-color:#bbf7d0;">
+    <div class="num" style="color:#16a34a;">1,350+</div>
+    <div class="lab">Virtual Machines</div>
+  </div>
+  <div class="kpi" style="background:#fef3c7; border-color:#fde68a;">
+    <div class="num" style="color:#d97706;">70+</div>
+    <div class="lab">Hosts &amp; Nodes</div>
+  </div>
+  <div class="kpi" style="background:#fdf2f8; border-color:#fbcfe8;">
+    <div class="num" style="color:#db2777;">17</div>
+    <div class="lab">Dashboard Pages</div>
+  </div>
+</div>
+
+<h3>Platforms Covered</h3>
+<table>
+  <tr>
+    <th>Platform</th><th>Integration Method</th><th>Key Capabilities</th>
+  </tr>
+  <tr><td>🖥️ VMware vSphere</td><td>vCenter REST API</td><td>Full VM lifecycle, snapshots, cloning, vMotion, chargeback</td></tr>
+  <tr><td>🔴 Red Hat OpenShift</td><td>Kubernetes / OCP API</td><td>Clusters, nodes, pods, operators, routes, storage, RHOAI</td></tr>
+  <tr><td>🟩 Nutanix AHV</td><td>Prism Central v3 API</td><td>Multi-site VMs, hosts, storage, subnets, alerts, provisioning</td></tr>
+  <tr><td>🤖 Ansible AAP</td><td>AAP REST API</td><td>Job templates, inventories, credentials, launch, live stdout</td></tr>
+  <tr><td>☁️ Amazon Web Services</td><td>AWS SDK (Boto3)</td><td>EC2, S3, RDS, VPCs, Cost Explorer, power actions, SSO tokens</td></tr>
+  <tr><td>🪟 Microsoft Hyper-V</td><td>WinRM PowerShell</td><td>VM inventory, power actions, checkpoints, CPU/RAM monitoring</td></tr>
+  <tr><td>📡 IPAM (SolarWinds)</td><td>SolarWinds REST API</td><td>Subnet grid, IP utilisation tracking, IP search</td></tr>
+  <tr><td>🗂️ Active Directory &amp; DNS</td><td>LDAP (MS-ADTS / MS-DNSP)</td><td>Users, groups, OUs, DNS zones &amp; records — no WinRM</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 2. NEW IN v6.2 — INSIGHTS & ANALYTICS                                 -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>2. New in v6.2 — Insights &amp; Analytics Engine</h2>
+
+<p style="margin-bottom:12px;">
+  The flagship addition in v6.2 is the <strong>Insights &amp; Analytics</strong> page, backed by a
+  <strong>PostgreSQL 16</strong> daily snapshot database. An automated collector runs every night at 11:00 PM,
+  capturing metrics from all eight platforms into twelve dedicated tables with a thirty-day rolling retention window.
+</p>
+
+<div class="feat-grid">
+  <div class="feat-card bl-indigo">
+    <div class="title"><span class="ic">🩺</span> Health Scorecard</div>
+    <ul>
+      <li>Real-time RAG (Red / Amber / Green) status across all eight platforms</li>
+      <li>Trend arrows showing improvement or degradation vs previous day</li>
+      <li>Per-platform health detail: CPU%, Memory%, storage, alerts</li>
+      <li>Single-glance dashboard for NOC and management reviews</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-sky">
+    <div class="title"><span class="ic">🔀</span> Change Detection</div>
+    <ul>
+      <li>Automatic day-over-day drift alerts</li>
+      <li>Tracks VM count, host count, pod count, IP utilisation shifts</li>
+      <li>Highlights newly added or removed resources</li>
+      <li>Colour-coded severity: informational, warning, critical</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">💰</span> Capacity &amp; Cost</div>
+    <ul>
+      <li>Storage and compute exhaustion date predictions</li>
+      <li>Monthly chargeback figures in INR (₹) and USD ($)</li>
+      <li>Per-platform resource consumption breakdown</li>
+      <li>Cost trend over the rolling thirty-day window</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-purple">
+    <div class="title"><span class="ic">📋</span> Executive Summary</div>
+    <ul>
+      <li>One-page, PDF-ready overview with aggregate KPIs</li>
+      <li>Platform health matrix suitable for management sharing</li>
+      <li>Key risk areas and capacity warnings highlighted</li>
+      <li>Suitable for weekly status reports and steering committee reviews</li>
+    </ul>
+  </div>
+</div>
+
+<div class="feat-wide bl-sky">
+  <div class="title"><span class="ic">📈</span> Historical Trending &amp; Capacity Forecasting</div>
+  <ul>
+    <li>Interactive trend charts for 7, 14, and 30-day windows covering all collected metrics</li>
+    <li>VM count, host count, pod count, and IP utilisation trends visualised over time</li>
+    <li>Linear regression capacity forecasting per metric with exhaustion date predictions</li>
+    <li>Storage, compute, and network exhaustion early-warning indicators</li>
+    <li>Day-over-day change arrows with percentage shift values</li>
+    <li>CSV-exportable historical data snapshots for offline analysis</li>
+  </ul>
+</div>
+
+<div class="feat-wide bl-gray">
+  <div class="title"><span class="ic">🗄️</span> PostgreSQL Daily Snapshot Infrastructure</div>
+  <ul>
+    <li>PostgreSQL 16 database with twelve dedicated snapshot tables</li>
+    <li>Automated Task Scheduler job runs daily at 11:00 PM</li>
+    <li>Captures: VMware, Hyper-V, Nutanix, OpenShift, AWS, IPAM, AD/DNS, Project Utilisation</li>
+    <li>Thirty-day rolling retention with automatic purge of older records</li>
+    <li>Retry logic with exponential back-off for resilient multi-platform collection</li>
+    <li>Three database views and a purge function for data maintenance</li>
+  </ul>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 3. PLATFORM FEATURES — VMWARE                                         -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>3. Platform Features</h2>
+
+<div class="platform-hdr" style="background:#eff6ff; color:#1d4ed8;">
+  <span class="icon">🖥️</span> VMware vSphere / vCenter
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card bl-blue">
+    <div class="title"><span class="ic">💻</span> Virtual Machine Management</div>
+    <ul>
+      <li>Live power state, CPU, RAM &amp; disk across all vCenters</li>
+      <li>Power On / Off / Restart from the portal</li>
+      <li>Clone VMs and vMotion live migration</li>
+      <li>Reconfigure CPU, RAM and disk size dynamically</li>
+      <li>Full-text search by name, OS, IP, host</li>
+      <li>Bulk VM power and clone actions</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-blue">
+    <div class="title"><span class="ic">📈</span> Capacity &amp; Host Monitoring</div>
+    <ul>
+      <li>ESXi host CPU and memory utilisation charts</li>
+      <li>Datastore usage with colour-coded free space</li>
+      <li>Host ranking — identify most overloaded nodes</li>
+      <li>Per-vCenter breakdown for multi-site setups</li>
+      <li>VMware resource overview gauges with hover tooltips</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-blue">
+    <div class="title"><span class="ic">💰</span> Project Chargeback</div>
+    <ul>
+      <li>VM costs aggregated by VMware tag / project</li>
+      <li>Monthly chargeback in INR and USD</li>
+      <li>Owner and email mapped to each project tag</li>
+      <li>Configurable pricing rates per CPU, RAM and disk</li>
+      <li>PDF export for billing and planning</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-blue">
+    <div class="title"><span class="ic">📸</span> Snapshot Management</div>
+    <ul>
+      <li>View all snapshots across vCenters</li>
+      <li>Create and delete snapshots from portal</li>
+      <li>Snapshot age and size tracking</li>
+      <li>Identify VMs with excessive snapshots</li>
+    </ul>
+  </div>
+</div>
+
+<!-- OCP -->
+<div class="platform-hdr" style="background:#fef2f2; color:#dc2626;">
+  <span class="icon">🔴</span> Red Hat OpenShift
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card bl-red">
+    <div class="title"><span class="ic">🗺️</span> Cluster Topology</div>
+    <ul>
+      <li>Interactive topology diagram per cluster</li>
+      <li>Nodes with CPU/RAM bars and pod counts</li>
+      <li>Namespace swim-lanes with health status</li>
+      <li>Operator health overlay on topology view</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-red">
+    <div class="title"><span class="ic">🖥️</span> Node Management</div>
+    <ul>
+      <li>Live nodes with role, status, CPU and RAM</li>
+      <li>Cordon, Uncordon and Drain nodes</li>
+      <li>Full describe: OS, kernel, kubelet version</li>
+      <li>Node age and Kubernetes version display</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-red">
+    <div class="title"><span class="ic">📦</span> Pod &amp; Namespace Monitoring</div>
+    <ul>
+      <li>All pods with namespace, node, phase and age</li>
+      <li>Log streaming with container selection</li>
+      <li>Namespaces with pod/service/deployment counts</li>
+      <li>PVC usage and resource quota visibility</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-red">
+    <div class="title"><span class="ic">🚀</span> Routes, Operators, Storage &amp; RHOAI</div>
+    <ul>
+      <li>All Routes with clickable HTTPS/HTTP URLs</li>
+      <li>All cluster operators — Available / Degraded</li>
+      <li>Storage classes, provisioner and reclaim policy</li>
+      <li>Direct link to RHOAI dashboard per cluster</li>
+    </ul>
+  </div>
+</div>
+
+<!-- NUTANIX -->
+<div class="platform-hdr" style="background:#f0fdf4; color:#15803d;">
+  <span class="icon">🟩</span> Nutanix Prism Central / AHV
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">🏢</span> Multi-Site DC / DR</div>
+    <ul>
+      <li>Separate DC and DR Prism Central grouping</li>
+      <li>Add multiple Prism Centrals per site</li>
+      <li>Per-PC status indicator and test connectivity</li>
+      <li>Live overview KPIs per Prism Central</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">💻</span> VMs, Hosts &amp; Provisioning</div>
+    <ul>
+      <li>All AHV VMs with power state, vCPUs, RAM, IPs</li>
+      <li>VM power actions: on, off, reset</li>
+      <li>On-demand snapshots via Prism Central API</li>
+      <li>3-step VM provisioning wizard with live image dropdown</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">🌐</span> Storage, Networks &amp; Alerts</div>
+    <ul>
+      <li>Storage containers with usage and free space</li>
+      <li>All subnets with VLAN ID and IP pool ranges</li>
+      <li>Live alerts with severity: Critical / Warning</li>
+      <li>Network type: VLAN or overlay</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">📊</span> Capacity &amp; Health Indicators</div>
+    <ul>
+      <li>Storage total/used with percentage utilisation</li>
+      <li>Per-PC cluster health RAG indicators</li>
+      <li>CPU and memory utilisation percentages</li>
+      <li>Error handling with partial data on timeout</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ANSIBLE -->
+<div class="platform-hdr" style="background:#fff7ed; color:#c2410c;">
+  <span class="icon">🤖</span> Ansible Automation Platform
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card bl-orange">
+    <div class="title"><span class="ic">📋</span> Templates &amp; Inventories</div>
+    <ul>
+      <li>Browse all job templates across AAP instances</li>
+      <li>View inventories and credentials</li>
+      <li>Launch templates with extra-vars via portal</li>
+      <li>Job execution with live stdout streaming</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-orange">
+    <div class="title"><span class="ic">📜</span> Activity Stream &amp; Audit</div>
+    <ul>
+      <li>Full automation activity stream per instance</li>
+      <li>Filter by event type and timestamp</li>
+      <li>Track who launched what and when</li>
+      <li>Correlates with the portal-wide audit log</li>
+    </ul>
+  </div>
+</div>
+
+<!-- AWS -->
+<div class="platform-hdr" style="background:#fffbeb; color:#b45309;">
+  <span class="icon">☁️</span> Amazon Web Services
+</div>
+
+<div class="feat-wide bl-aws">
+  <div class="title"><span class="ic">☁️</span> AWS Integration</div>
+  <ul>
+    <li>EC2 instance discovery with start, stop and reboot actions</li>
+    <li>S3 buckets, RDS databases, VPCs and subnet IP utilisation</li>
+    <li>IAM user and SSO session token support</li>
+    <li>AWS Cost Explorer integration for cost tracking</li>
+    <li>Live status indicators in the Overview banner</li>
+    <li>Per-instance metadata: type, AZ, public/private IPs</li>
+  </ul>
+</div>
+
+<!-- HYPER-V -->
+<div class="platform-hdr" style="background:#eff6ff; color:#0284c7;">
+  <span class="icon">🪟</span> Microsoft Hyper-V
+</div>
+
+<div class="feat-wide bl-hv">
+  <div class="title"><span class="ic">🪟</span> Hyper-V Integration</div>
+  <ul>
+    <li>Standalone Hyper-V hosts via WinRM PowerShell remoting — no agent required</li>
+    <li>VM inventory with power state, CPU, memory and disk</li>
+    <li>Power actions: start, stop, restart VMs</li>
+    <li>Checkpoint create, restore and delete</li>
+    <li>Per-host CPU usage percentage and RAM utilisation bars</li>
+    <li>Logical processor count and total/used RAM tracking</li>
+  </ul>
+</div>
+
+<!-- AD/DNS -->
+<div class="platform-hdr" style="background:#f5f3ff; color:#6d28d9;">
+  <span class="icon">🗂️</span> Active Directory &amp; DNS
+</div>
+
+<div class="feat-grid">
+  <div class="feat-card bl-purple">
+    <div class="title"><span class="ic">🌲</span> AD Management</div>
+    <ul>
+      <li>Browse all AD users with OU and account status</li>
+      <li>Create users with password policy &amp; group copy</li>
+      <li>Enable / Disable / Unlock / Delete accounts</li>
+      <li>Reset passwords, manage group membership</li>
+      <li>Pure LDAP integration — no WinRM or PowerShell agent</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-purple">
+    <div class="title"><span class="ic">🌐</span> DNS Zone &amp; Record Management</div>
+    <ul>
+      <li>Browse AD-integrated DNS zones</li>
+      <li>A, CNAME, MX, PTR, SRV, NS, TXT records</li>
+      <li>Add and delete DNS records from the portal</li>
+      <li>Flush entire DNS server cache</li>
+      <li>MS-DNSP protocol via LDAP — no WinRM required</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 4. CROSS-PLATFORM CAPABILITIES                                        -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>4. Cross-Platform Capabilities</h2>
+
+<div class="feat-grid">
+  <div class="feat-card bl-cyan">
+    <div class="title"><span class="ic">📡</span> IPAM &amp; Asset Inventory</div>
+    <ul>
+      <li>Subnet grid with percentage utilisation and IP counts</li>
+      <li>IP search within subnets (SolarWinds integration)</li>
+      <li>Top utilised subnets on the Overview page</li>
+      <li>Physical/virtual asset tracking with inline editing</li>
+      <li>CSV export of asset inventory</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-gray">
+    <div class="title"><span class="ic">🔍</span> Universal Global Search</div>
+    <ul>
+      <li>Search VMs, hosts, snapshots, networks, datastores</li>
+      <li>OpenShift clusters, Nutanix PCs, Ansible jobs</li>
+      <li>Support contacts by name, role, and email</li>
+      <li>Keyboard navigation: ↑↓ Enter ESC</li>
+      <li>Contact click copies email to clipboard</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-purple">
+    <div class="title"><span class="ic">💬</span> LaaS AI Assistant</div>
+    <ul>
+      <li>Natural-language questions about infrastructure</li>
+      <li>Voice input — click 🎤 and speak your query</li>
+      <li>Powered entirely by live portal data — offline-safe</li>
+      <li>Contextually aware of all platforms and metrics</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-orange">
+    <div class="title"><span class="ic">📋</span> VM Request Workflow</div>
+    <ul>
+      <li>Single "+ Request VM" button with platform picker</li>
+      <li>VMware / OpenShift / Nutanix guided wizards</li>
+      <li>Admin-approval workflow with status tracking</li>
+      <li>Multi-platform reviews page with platform tabs</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-green">
+    <div class="title"><span class="ic">💳</span> Chargeback &amp; Pricing</div>
+    <ul>
+      <li>Per-platform pricing: VMware, OCP, Nutanix</li>
+      <li>Monthly cost breakdown in INR (₹) and USD ($)</li>
+      <li>Project-level billing via VMware tags</li>
+      <li>Configurable pricing rates saved server-side</li>
+    </ul>
+  </div>
+  <div class="feat-card bl-blue">
+    <div class="title"><span class="ic">🎨</span> Themes, Charts &amp; Audit</div>
+    <ul>
+      <li>Three themes: Dark, Light, Wipro Wings (purple)</li>
+      <li>Multi-platform donut charts with hover tooltips</li>
+      <li>VMware capacity gauges with animated fill bars</li>
+      <li>Full portal audit log — every action recorded</li>
+      <li>Exportable audit data for compliance</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 5. ACCESS & ROLES                                                     -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>5. Access Control &amp; Roles</h2>
+
+<table>
+  <tr>
+    <th style="width:14%;">Role</th>
+    <th style="width:28%;">Description</th>
+    <th>Key Permissions</th>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#c2410c;">Admin</td>
+    <td>Full control of all platforms and portal settings</td>
+    <td>All platform tabs · Add/edit/delete infrastructure sources · Approve/decline VM requests · Manage portal users &amp; roles · Configure pricing, thresholds, notifications · View &amp; export audit log</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#1d4ed8;">Operator</td>
+    <td>Day-to-day operations and provisioning approvals</td>
+    <td>All VMware VM actions · OCP node cordon/drain · Nutanix VM actions &amp; snapshots · Approve/decline VM requests · AD user/group/DNS management · Launch Ansible templates · View IPAM, Assets, Chargeback</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#6d28d9;">Viewer</td>
+    <td>Read-only visibility across all platforms</td>
+    <td>All monitoring tabs (read-only) · IPAM, Assets, Chargeback (read-only) · Ansible: view templates/jobs (no launch) · Full audit log access (view only)</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#15803d;">Requester</td>
+    <td>Self-service VM provisioning requests only</td>
+    <td>Submit VMware / OpenShift / Nutanix VM requests · Track own request status · View personal audit history · No infrastructure monitoring access</td>
+  </tr>
+</table>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 6. ARCHITECTURE SUMMARY                                                -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>6. Architecture &amp; Technology Stack</h2>
+
+<table>
+  <tr><th>Component</th><th>Technology</th><th>Details</th></tr>
+  <tr><td>Frontend</td><td>React 18 + Vite 7</td><td>Single-page app, HTTPS on port 443, served via serve</td></tr>
+  <tr><td>Backend</td><td>Python FastAPI</td><td>REST API on port 8001, async endpoints, JWT auth</td></tr>
+  <tr><td>Database</td><td>PostgreSQL 16.6</td><td>12 snapshot tables, 3 views, daily auto-purge, port 5433</td></tr>
+  <tr><td>Daily Collector</td><td>Python (Task Scheduler)</td><td>Runs at 23:00 daily, 8-platform data capture, retry logic</td></tr>
+  <tr><td>Authentication</td><td>JWT Bearer Tokens</td><td>Session-based, role-mapped, stored in sessionStorage</td></tr>
+  <tr><td>AI Assistant</td><td>Local NLP (offline)</td><td>No external API calls, fully powered by live portal data</td></tr>
+  <tr><td>Voice Features</td><td>Web Speech API</td><td>Text-to-speech voiceover, speech-to-text AI input</td></tr>
+  <tr><td>Hosting</td><td>Windows Server</td><td>Services: CaaS-Backend, CaaS-Frontend, CaaS-PostgreSQL</td></tr>
+</table>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 7. VERSION HISTORY                                                     -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>7. Version History</h2>
+
+<table>
+  <tr><th>Version</th><th>Date</th><th>Highlights</th></tr>
+  <tr>
+    <td style="font-weight:700; color:#6366f1;">v6.2</td><td>Mar 2026</td>
+    <td>Insights &amp; Analytics Engine (4 tabs) · PostgreSQL 16 daily snapshots · Historical Trending · Capacity Forecasting · Daily Collector with retry logic · 30-day rolling retention</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#FF9900;">v6.1</td><td>Mar 2026</td>
+    <td>AWS EC2/S3/RDS/VPC integration · Hyper-V WinRM integration · Power actions &amp; checkpoints · SSO session tokens · CPU/RAM monitoring</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#3b82f6;">v6.0</td><td>Mar 2026</td>
+    <td>Universal Global Search · Multi-platform donut charts · Revamped Support Escalation Matrix</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#f97316;">v5.9</td><td>Feb 2026</td>
+    <td>Ansible Automation Platform · Multi-platform VM Request Wizard (VMware/OCP/Nutanix)</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#06b6d4;">v5.8</td><td>Jan 2026</td>
+    <td>IPAM &amp; Chargeback pages · Subnet utilisation · SolarWinds integration</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#22c55e;">v5.7</td><td>Dec 2025</td>
+    <td>Nutanix AHV full integration · Multi-site DC/DR · Prism Central v3 API</td>
+  </tr>
+  <tr>
+    <td style="font-weight:700; color:#a78bfa;">v5.6</td><td>Nov 2025</td>
+    <td>Dark/Light/Wings themes · Animated ticker · Topology diagrams · AI Chatbot</td>
+  </tr>
+</table>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- 8. CONTACT DETAILS                                                     -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<h2>8. Contact Details</h2>
+
+<p style="margin-bottom:10px;">
+  For queries, access requests, or feedback regarding the LaaS Dashboard, please reach out to the team below.
+</p>
+
+<div class="contact-grid">
+  <div class="contact-card" style="background:#fffbeb; border:2px solid #f59e0b;">
+    <div class="avatar">👑</div>
+    <div class="name" style="color:#b45309;">Mayur Anilkumar Shah</div>
+    <div class="role" style="color:#d97706;">Account Delivery Head (ADH)</div>
+    <div class="email">✉️ <a href="mailto:mayur.shah@wipro.com" style="color:#3b82f6; text-decoration:none;">mayur.shah@wipro.com</a></div>
+  </div>
+  <div class="contact-card" style="background:#f5f3ff; border:2px solid #8b5cf6;">
+    <div class="avatar">🏗️</div>
+    <div class="name" style="color:#6d28d9;">Khalid Khan</div>
+    <div class="role" style="color:#7c3aed;">Engineering Head</div>
+    <div class="email">✉️ <a href="mailto:khalid.khan@wipro.com" style="color:#3b82f6; text-decoration:none;">khalid.khan@wipro.com</a></div>
+  </div>
+  <div class="contact-card" style="background:#ecfdf5; border:2px solid #06b6d4;">
+    <div class="avatar">🖥️</div>
+    <div class="name" style="color:#0e7490;">Sekhar Perumal</div>
+    <div class="role" style="color:#0891b2;">Infrastructure Lead — DC &amp; VMware</div>
+    <div class="email">✉️ <a href="mailto:sekhar.perumal@wipro.com" style="color:#3b82f6; text-decoration:none;">sekhar.perumal@wipro.com</a></div>
+  </div>
+</div>
+
+<div style="margin-top:10px; padding:14px 18px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; font-size:10pt; color:#334155; line-height:1.7;">
+  <strong>Distribution:</strong> This document is intended for the SDX Infrastructure &amp; Data Centre team, project stakeholders, and management. 
+  For access provisioning or demo requests, contact any of the team members listed above.<br>
+  <strong>Dashboard URL:</strong> <span style="color:#3b82f6; font-weight:600;">https://&lt;server-ip&gt;</span> (HTTPS, port 443)
+</div>
+
+</div><!-- /content -->
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- FOOTER                                                                 -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div class="footer">
+  <div><strong>LaaS Dashboard v6.2</strong> &nbsp;·&nbsp; Wipro SDX INFRA &amp; DC Operations &nbsp;·&nbsp; March 2026</div>
+  <div>Confidential &nbsp;·&nbsp; For Internal Use Only</div>
+</div>
+
+</body>
+</html>

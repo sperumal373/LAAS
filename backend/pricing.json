@@ -1,0 +1,13 @@
+{
+  "cpu_per_core_month_inr": 500.0,
+  "ram_per_gb_month_inr": 200.0,
+  "ssd_per_gb_month_inr": 35.0,
+  "hdd_per_gb_month_inr": 83.5,
+  "disk_per_gb_month_inr": 83.5,
+  "windows_license_month_inr": 12500.0,
+  "rhel_license_month_inr": 10000.0,
+  "internet_per_vm_month_inr": 2500.0,
+  "usd_rate": 83.5,
+  "updated_by": "sekhar",
+  "updated_at": "2026-03-15T15:18:49.254263"
+}

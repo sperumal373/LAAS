@@ -1,0 +1,45 @@
+[36mvite v7.3.1 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 9 modules transformed.
+[31m✗[39m Build failed in 235ms
+[31merror during build:
+[31m[vite:esbuild] Transform failed with 3 errors:
+C:/caas-dashboard/frontend/src/App.jsx:7968:14: ERROR: Unexpected closing fragment tag does not match opening "div" tag
+C:/caas-dashboard/frontend/src/App.jsx:7970:10: ERROR: Unexpected closing fragment tag does not match opening "div" tag
+C:/caas-dashboard/frontend/src/App.jsx:8007:3: ERROR: Expected "}" but found ";"[31m
+file: [36mC:/caas-dashboard/frontend/src/App.jsx:7968:14[31m
+[33m
+[33mUnexpected closing fragment tag does not match opening "div" tag[33m
+7966 |                  </div>
+7967 |                )}
+7968 |              </>
+     |                ^
+7969 |            )}
+7970 |          </>
+
+[33mUnexpected closing fragment tag does not match opening "div" tag[33m
+7968 |              </>
+7969 |            )}
+7970 |          </>
+     |            ^
+7971 |        )}
+7972 |  
+
+[33mExpected "}" but found ";"[33m
+8005 |        )}
+8006 |      </div>
+8007 |    );
+     |     ^
+8008 |  }
+8009 |  
+[31m
+    at failureErrorWithLog (C:\caas-dashboard\frontend\node_modules\esbuild\lib\main.js:1467:15)
+    at C:\caas-dashboard\frontend\node_modules\esbuild\lib\main.js:736:50
+    at responseCallbacks.<computed> (C:\caas-dashboard\frontend\node_modules\esbuild\lib\main.js:603:9)
+    at handleIncomingPacket (C:\caas-dashboard\frontend\node_modules\esbuild\lib\main.js:658:12)
+    at Socket.readFromStdout (C:\caas-dashboard\frontend\node_modules\esbuild\lib\main.js:581:7)
+    at Socket.emit (node:events:508:20)
+    at addChunk (node:internal/streams/readable:564:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:515:3)
+    at Readable.push (node:internal/streams/readable:395:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)[39m

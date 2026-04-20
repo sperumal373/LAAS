@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaaS Dashboard — Team Launch Email</title>
+<style>
+  body { margin:0; padding:0; background:#f4f6f8; font-family:'Segoe UI',Calibri,Arial,sans-serif; color:#1e293b; }
+  .wrapper { max-width:720px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 16px rgba(0,0,0,.08); }
+  .header { background:linear-gradient(135deg,#0f172a,#1e3a5f,#1e40af); padding:32px 40px 28px; }
+  .header h1 { color:#fff; font-size:24pt; font-weight:900; margin:0; letter-spacing:-.5px; }
+  .header h1 span { color:#93c5fd; font-weight:400; font-size:17pt; }
+  .header .tag { display:inline-block; background:rgba(255,255,255,.18); color:#fff; padding:4px 14px; border-radius:20px; font-size:10pt; font-weight:600; margin-top:8px; }
+  .body-content { padding:32px 40px; }
+  .body-content p { font-size:11pt; line-height:1.8; margin-bottom:14px; }
+  .greeting { font-size:12pt; font-weight:600; margin-bottom:16px; }
+  .highlight-box { background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #3b82f6; border-radius:8px; padding:16px 20px; margin:18px 0; }
+  .highlight-box h3 { margin:0 0 8px; font-size:12pt; color:#1d4ed8; }
+  .platform-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin:8px 0; }
+  .platform-item { display:flex; align-items:center; gap:7px; font-size:10.5pt; line-height:1.6; }
+  .platform-item .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .cta-box { background:linear-gradient(135deg,#0f172a,#1e3a5f); border-radius:10px; padding:22px 28px; margin:22px 0; text-align:center; }
+  .cta-box .url { font-size:16pt; font-weight:800; color:#93c5fd; letter-spacing:.5px; }
+  .cta-box .note { font-size:9.5pt; color:rgba(255,255,255,.6); margin-top:6px; }
+  .feedback-box { background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #22c55e; border-radius:8px; padding:16px 20px; margin:18px 0; }
+  .feedback-box h3 { margin:0 0 8px; font-size:12pt; color:#15803d; }
+  .feedback-list { padding-left:18px; margin:6px 0 0; }
+  .feedback-list li { font-size:10.5pt; margin-bottom:4px; line-height:1.7; color:#334155; }
+  .new-badge { display:inline-block; background:#6366f120; color:#6366f1; border:1px solid #6366f140; padding:2px 8px; border-radius:12px; font-size:8pt; font-weight:800; letter-spacing:.4px; vertical-align:middle; margin-left:4px; }
+  .contact-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:16px 0; }
+  .contact-card { border:1px solid #e2e8f0; border-radius:8px; padding:14px 12px; text-align:center; }
+  .contact-card .name { font-size:11pt; font-weight:700; color:#0f172a; }
+  .contact-card .role { font-size:9pt; color:#64748b; margin:3px 0 6px; }
+  .contact-card .email a { font-size:9.5pt; color:#3b82f6; text-decoration:none; }
+  .sign-off { margin-top:24px; padding-top:18px; border-top:1px solid #e2e8f0; }
+  .sign-off .name { font-weight:700; font-size:11pt; }
+  .sign-off .title { font-size:10pt; color:#64748b; }
+  .footer { background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px 40px; font-size:8.5pt; color:#94a3b8; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>L<span>aaS</span> Dashboard</h1>
+    <div class="tag">v6.2 &nbsp;·&nbsp; Now Live for the Team</div>
+  </div>
+
+  <!-- Body -->
+  <div class="body-content">
+
+    <p class="greeting">Dear Team,</p>
+
+    <p>
+      I am pleased to announce that the <strong>LaaS (Lab as a Service) Dashboard v6.2</strong> is now fully operational
+      and ready for daily use by the entire SDX Infrastructure &amp; Data Centre team. This unified portal consolidates
+      <strong>eight enterprise infrastructure platforms</strong> into a single browser-based interface — eliminating the
+      need to log into individual platform consoles.
+    </p>
+
+    <!-- Access URL -->
+    <div class="cta-box">
+      <div class="url">https://&lt;server-ip&gt;</div>
+      <div class="note">HTTPS · Port 443 · Use your AD credentials (sdxtest.local) to sign in</div>
+    </div>
+
+    <!-- Platforms -->
+    <div class="highlight-box">
+      <h3>🔗 Platforms Integrated</h3>
+      <div class="platform-grid">
+        <div class="platform-item"><span class="dot" style="background:#3b82f6;"></span> <strong>VMware vCenter</strong> — VMs, hosts, snapshots, cloning, vMotion</div>
+        <div class="platform-item"><span class="dot" style="background:#ef4444;"></span> <strong>Red Hat OpenShift</strong> — Clusters, nodes, pods, operators, RHOAI</div>
+        <div class="platform-item"><span class="dot" style="background:#22c55e;"></span> <strong>Nutanix Prism Central</strong> — Multi-site DC/DR, AHV VMs, storage, alerts</div>
+        <div class="platform-item"><span class="dot" style="background:#f97316;"></span> <strong>Ansible AAP</strong> — Job templates, inventories, live execution</div>
+        <div class="platform-item"><span class="dot" style="background:#FF9900;"></span> <strong>Amazon Web Services</strong> — EC2, S3, RDS, VPCs, Cost Explorer</div>
+        <div class="platform-item"><span class="dot" style="background:#00ADEF;"></span> <strong>Microsoft Hyper-V</strong> — VMs, checkpoints, CPU/RAM via WinRM</div>
+        <div class="platform-item"><span class="dot" style="background:#8b5cf6;"></span> <strong>Active Directory &amp; DNS</strong> — Users, groups, DNS records via LDAP</div>
+        <div class="platform-item"><span class="dot" style="background:#06b6d4;"></span> <strong>IPAM (SolarWinds)</strong> — Subnets, IP utilisation, IP search</div>
+      </div>
+    </div>
+
+    <!-- Key Capabilities -->
+    <div class="highlight-box" style="background:#fef3c7; border-color:#fde68a; border-left-color:#f59e0b;">
+      <h3>⚡ Key Capabilities</h3>
+      <div class="platform-grid">
+        <div class="platform-item"><span class="dot" style="background:#3b82f6;"></span> Full VM lifecycle — power, clone, migrate, reconfigure, snapshots</div>
+        <div class="platform-item"><span class="dot" style="background:#ef4444;"></span> OpenShift node cordon/drain, pod logs, operator health</div>
+        <div class="platform-item"><span class="dot" style="background:#f97316;"></span> Self-service VM Request Wizard (VMware / OCP / Nutanix)</div>
+        <div class="platform-item"><span class="dot" style="background:#ec4899;"></span> Chargeback — monthly costs in ₹ INR and $ USD per project</div>
+        <div class="platform-item"><span class="dot" style="background:#64748b;"></span> Universal Search — find any VM, host, pod, contact instantly</div>
+        <div class="platform-item"><span class="dot" style="background:#7c3aed;"></span> LaaS AI Assistant — ask natural-language infrastructure queries</div>
+        <div class="platform-item"><span class="dot" style="background:#8b5cf6;"></span> Asset Inventory with inline editing and CSV export</div>
+        <div class="platform-item"><span class="dot" style="background:#0f172a;"></span> Full Audit Log — every portal action tracked and exportable</div>
+      </div>
+    </div>
+
+    <!-- New in v6.2 -->
+    <div class="highlight-box" style="background:#eef2ff; border-color:#c7d2fe; border-left-color:#6366f1;">
+      <h3>📊 New in v6.2 — Insights &amp; Analytics Engine <span class="new-badge">NEW</span></h3>
+      <ul class="feedback-list">
+        <li><strong>Health Scorecard</strong> — Real-time RAG (Red/Amber/Green) status across all 8 platforms with trend arrows</li>
+        <li><strong>Change Detection</strong> — Automatic day-over-day drift alerts for VM count, host count, pod count, IP utilisation</li>
+        <li><strong>Capacity &amp; Cost</strong> — Storage/compute exhaustion predictions with monthly chargeback in ₹ and $</li>
+        <li><strong>Executive Summary</strong> — One-page PDF-ready overview with aggregate KPIs and platform health matrix</li>
+        <li><strong>Historical Trending</strong> — Interactive charts for 7, 14, and 30-day trends across all metrics</li>
+        <li><strong>Capacity Forecasting</strong> — Linear regression predictions for storage, compute, and network exhaustion dates</li>
+        <li><strong>Daily Snapshots</strong> — Automated nightly collector (11 PM) captures data from all platforms into PostgreSQL</li>
+      </ul>
+    </div>
+
+    <p>
+      The dashboard supports <strong>three themes</strong> (Dark, Light, Wipro Wings) and features a <strong>voiceover walkthrough</strong>
+      accessible via the speaker button next to the About LaaS section. Role-based access (Admin, Operator, Viewer, Requester)
+      ensures each team member sees exactly what they need.
+    </p>
+
+    <!-- Feedback Request -->
+    <div class="feedback-box">
+      <h3>📝 Your Feedback Is Essential</h3>
+      <p style="margin:0 0 8px; font-size:10.5pt; color:#334155;">
+        We encourage every team member to <strong>start using the dashboard actively from today</strong> and share your
+        feedback so we can enhance it further at the earliest. Please share your observations on:
+      </p>
+      <ul class="feedback-list">
+        <li><strong>Functionality</strong> — Are all features working as expected? Any bugs or errors encountered?</li>
+        <li><strong>Capabilities</strong> — Are there additional features, platforms, or data points you'd like to see?</li>
+        <li><strong>User Experience</strong> — Is the navigation intuitive? Are load times acceptable? Any UI improvements?</li>
+        <li><strong>Usefulness</strong> — Which features are most valuable for your daily work? What saves you the most time?</li>
+        <li><strong>Missing Workflows</strong> — Any operational workflows not yet covered that would benefit from portal integration?</li>
+      </ul>
+      <p style="margin:10px 0 0; font-size:10.5pt; color:#15803d; font-weight:600;">
+        Please send your feedback to any of the contacts below. Every suggestion will be reviewed and prioritised for the next release.
+      </p>
+    </div>
+
+    <!-- Contacts -->
+    <p style="font-weight:700; font-size:11pt; margin-bottom:6px;">📞 Contact &amp; Support</p>
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="name">Mayur Anilkumar Shah</div>
+        <div class="role">Account Delivery Head (ADH)</div>
+        <div class="email">✉️ <a href="mailto:mayur.shah@wipro.com">mayur.shah@wipro.com</a></div>
+      </div>
+      <div class="contact-card">
+        <div class="name">Khalid Khan</div>
+        <div class="role">Engineering Head</div>
+        <div class="email">✉️ <a href="mailto:khalid.khan@wipro.com">khalid.khan@wipro.com</a></div>
+      </div>
+      <div class="contact-card">
+        <div class="name">Sekhar Perumal</div>
+        <div class="role">Infrastructure Lead — DC &amp; VMware</div>
+        <div class="email">✉️ <a href="mailto:sekhar.perumal@wipro.com">sekhar.perumal@wipro.com</a></div>
+      </div>
+    </div>
+
+    <p>
+      A detailed <strong>Features &amp; Screenshots Guide (PDF)</strong> is attached for your reference. It covers every
+      page of the dashboard with actual screenshots, feature checklists, and a step-by-step usage guide.
+    </p>
+
+    <p>
+      Looking forward to your active participation and valuable feedback. Together, we can make this portal an
+      indispensable tool for the entire team.
+    </p>
+
+    <!-- Sign off -->
+    <div class="sign-off">
+      <p>Best Regards,</p>
+      <p class="name">Sekhar Perumal</p>
+      <p class="title">Infrastructure Lead — DC &amp; VMware<br/>
+      Wipro Limited · SDX Infrastructure &amp; Data Centre Operations<br/>
+      ✉️ sekhar.perumal@wipro.com</p>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    LaaS Dashboard v6.2 &nbsp;·&nbsp; Wipro SDX INFRA &amp; DC Operations &nbsp;·&nbsp; March 2026 &nbsp;·&nbsp; Confidential — For Internal Use Only
+  </div>
+
+</div>
+</body>
+</html>

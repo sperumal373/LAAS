@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LaaS Portal – End User Manual</title>
+<style>
+  :root{
+    --navy:#0d1829;--panel:#111827;--panelAlt:#0f172a;
+    --accent:#3b82f6;--cyan:#06b6d4;--green:#10b981;
+    --red:#ef4444;--yellow:#f59e0b;--purple:#8b5cf6;
+    --text:#e2e8f0;--sub:#94a3b8;--mute:#475569;
+    --border:#1e293b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#060d18;color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.7}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ── COVER ── */
+  .cover{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:linear-gradient(145deg,#060d18 0%,#0d1829 40%,#0a1a2e 100%);
+    position:relative;overflow:hidden;padding:60px 40px;text-align:center}
+  .cover::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse 80% 50% at 50% 0%,#3b82f620,transparent),
+               radial-gradient(ellipse 60% 40% at 80% 100%,#06b6d415,transparent);pointer-events:none}
+  .cover-grid{position:absolute;inset:0;
+    background-image:linear-gradient(var(--border) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border) 1px,transparent 1px);
+    background-size:48px 48px;opacity:.25;pointer-events:none}
+  .cover-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 18px;border:1px solid var(--accent);
+    border-radius:999px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+    color:var(--accent);background:var(--accent)12;margin-bottom:32px}
+  .cover-logo{width:90px;height:90px;border-radius:22px;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-size:42px;
+    margin:0 auto 28px;box-shadow:0 0 60px #3b82f640,0 0 120px #06b6d420}
+  .cover-title{font-size:52px;font-weight:900;letter-spacing:-2px;line-height:1.1;margin-bottom:12px;
+    background:linear-gradient(135deg,#fff 30%,var(--cyan));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .cover-sub{font-size:18px;color:var(--sub);margin-bottom:40px;font-weight:400}
+  .cover-meta{display:flex;gap:32px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+  .cover-meta-item{display:flex;flex-direction:column;align-items:center;gap:4px}
+  .cover-meta-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute)}
+  .cover-meta-val{font-size:14px;font-weight:700;color:var(--text)}
+  .cover-divider{width:80px;height:3px;background:linear-gradient(90deg,var(--accent),var(--cyan));
+    border-radius:2px;margin:32px auto}
+  .cover-platforms{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:32px}
+  .platform-chip{display:flex;align-items:center;gap:8px;padding:8px 16px;
+    border:1px solid;border-radius:8px;font-size:12px;font-weight:600}
+
+  /* ── LAYOUT ── */
+  .page-wrap{max-width:1100px;margin:0 auto;padding:0 32px}
+
+  /* ── TOC ── */
+  .toc{background:linear-gradient(135deg,var(--panel),var(--panelAlt));border:1px solid var(--border);
+    border-radius:16px;padding:36px 40px;margin:60px 0}
+  .toc-title{font-size:22px;font-weight:900;color:var(--text);margin-bottom:6px}
+  .toc-sub{font-size:12px;color:var(--mute);margin-bottom:28px}
+  .toc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 32px}
+  .toc-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;
+    transition:background .15s;cursor:pointer}
+  .toc-item:hover{background:var(--accent)10}
+  .toc-num{font-size:11px;font-weight:800;color:var(--accent);min-width:22px;font-family:monospace}
+  .toc-label{font-size:13px;color:var(--sub)}
+  .toc-label:hover{color:var(--accent)}
+
+  /* ── SECTION ── */
+  .section{margin:60px 0;scroll-margin-top:24px}
+  .section-header{display:flex;align-items:center;gap:16px;margin-bottom:28px;
+    padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .section-icon{width:46px;height:46px;border-radius:12px;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .section-title{font-size:26px;font-weight:900;letter-spacing:-.5px}
+  .section-desc{font-size:13px;color:var(--sub);margin-top:3px}
+
+  /* ── CARDS ── */
+  .card{background:linear-gradient(135deg,var(--panel),var(--panelAlt));border:1px solid var(--border);
+    border-radius:12px;padding:22px 24px;margin-bottom:16px}
+  .card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:10px;
+    display:flex;align-items:center;gap:8px}
+  .card-body{font-size:13px;color:var(--sub);line-height:1.8}
+
+  /* ── FEATURE GRID ── */
+  .feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin:20px 0}
+  .feat-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;
+    transition:border-color .2s,transform .2s}
+  .feat-card:hover{border-color:var(--accent)60;transform:translateY(-2px)}
+  .feat-icon{font-size:26px;margin-bottom:10px}
+  .feat-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px}
+  .feat-desc{font-size:12px;color:var(--sub);line-height:1.6}
+
+  /* ── ROLE TABLE ── */
+  .role-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
+  .role-table th{background:var(--accent)18;color:var(--accent);font-weight:700;letter-spacing:.8px;
+    text-transform:uppercase;padding:10px 14px;border:1px solid var(--border);text-align:left}
+  .role-table td{padding:9px 14px;border:1px solid var(--border);color:var(--sub);vertical-align:top}
+  .role-table tr:nth-child(even) td{background:var(--accent)05}
+  .role-table tr:hover td{background:var(--accent)10}
+  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .badge-green{background:var(--green)20;color:var(--green);border:1px solid var(--green)30}
+  .badge-blue{background:var(--accent)20;color:var(--accent);border:1px solid var(--accent)30}
+  .badge-yellow{background:var(--yellow)20;color:var(--yellow);border:1px solid var(--yellow)30}
+  .badge-red{background:var(--red)20;color:var(--red);border:1px solid var(--red)30}
+  .badge-purple{background:var(--purple)20;color:var(--purple);border:1px solid var(--purple)30}
+  .badge-gray{background:var(--mute)20;color:var(--mute);border:1px solid var(--mute)30}
+
+  /* ── STEPS ── */
+  .steps{counter-reset:step;display:flex;flex-direction:column;gap:0}
+  .step{display:flex;gap:18px;padding:18px 0;border-bottom:1px solid var(--border)60;position:relative}
+  .step:last-child{border-bottom:none}
+  .step-num{counter-increment:step;width:34px;height:34px;border-radius:50%;flex-shrink:0;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff}
+  .step-content{flex:1}
+  .step-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:4px}
+  .step-body{font-size:12px;color:var(--sub);line-height:1.7}
+
+  /* ── CALLOUT ── */
+  .callout{display:flex;gap:14px;padding:16px 20px;border-radius:10px;margin:16px 0;border-left:3px solid}
+  .callout-tip{background:var(--green)10;border-color:var(--green);color:var(--green)}
+  .callout-warn{background:var(--yellow)10;border-color:var(--yellow);color:var(--yellow)}
+  .callout-info{background:var(--accent)10;border-color:var(--accent);color:var(--accent)}
+  .callout-icon{font-size:20px;flex-shrink:0;margin-top:1px}
+  .callout-text{font-size:12px;color:var(--sub);line-height:1.7}
+  .callout-text strong{font-weight:700}
+
+  /* ── SPEC TABLE ── */
+  .spec-table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0}
+  .spec-table tr{border-bottom:1px solid var(--border)}
+  .spec-table td:first-child{padding:10px 14px;color:var(--mute);font-weight:600;min-width:200px;
+    background:var(--panelAlt)}
+  .spec-table td:last-child{padding:10px 14px;color:var(--text)}
+
+  /* ── KPI ROW ── */
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin:20px 0}
+  .kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+  .kpi-val{font-size:28px;font-weight:900;font-family:monospace;line-height:1}
+  .kpi-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--mute);margin-top:6px}
+
+  /* ── PLATFORM SECTION ── */
+  .platform-header{padding:16px 22px;border-radius:12px 12px 0 0;display:flex;align-items:center;gap:14px;
+    margin-top:28px;border:1px solid}
+  .platform-body{border:1px solid;border-top:none;border-radius:0 0 12px 12px;padding:22px 24px}
+
+  /* ── CODE ── */
+  code{font-family:'Cascadia Code','Consolas',monospace;font-size:11px;background:var(--panelAlt);
+    border:1px solid var(--border);padding:2px 7px;border-radius:4px;color:var(--cyan)}
+  pre{background:var(--panelAlt);border:1px solid var(--border);border-radius:8px;padding:16px 20px;
+    overflow-x:auto;font-family:'Cascadia Code','Consolas',monospace;font-size:11px;color:var(--cyan);line-height:1.7}
+
+  /* ── NAV ── */
+  .sticky-nav{position:sticky;top:0;z-index:100;background:rgb(6 13 24 / .95);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+    padding:10px 32px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+  .nav-brand{font-weight:900;font-size:15px;color:var(--text);display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .nav-items{display:flex;gap:4px;flex-wrap:wrap}
+  .nav-link-top{padding:5px 11px;border-radius:6px;font-size:11px;font-weight:600;color:var(--sub);
+    transition:background .15s,color .15s;cursor:pointer}
+  .nav-link-top:hover{background:var(--accent)18;color:var(--accent)}
+
+  /* ── FOOTER ── */
+  .doc-footer{margin-top:80px;border-top:1px solid var(--border);padding:40px 0;text-align:center}
+  .auth-card{display:grid;grid-template-columns:1fr 1fr;gap:0;
+    background:linear-gradient(135deg,var(--panel),var(--panelAlt));
+    border:1px solid var(--border);border-radius:14px;overflow:hidden;margin:32px 0}
+  .auth-cell{padding:24px 32px;display:flex;align-items:center;gap:18px}
+  .auth-cell:first-child{border-right:1px solid var(--border)}
+  .auth-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:24px;flex-shrink:0}
+  .auth-role{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute);margin-bottom:5px}
+  .auth-name{font-size:18px;font-weight:900;color:var(--text)}
+  .auth-dept{font-size:12px;margin-top:3px}
+
+  /* ── SCREENSHOT MOCKUPS ── */
+  .screenshot-wrap{margin:24px 0 28px;border-radius:12px;overflow:hidden;
+    box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px var(--border);
+    background:var(--panelAlt)}
+  .screen-bar{background:#1a2535;padding:10px 14px;display:flex;align-items:center;gap:10px;
+    border-bottom:1px solid var(--border)}
+  .screen-dots{display:flex;gap:5px}
+  .screen-dot{width:10px;height:10px;border-radius:50%}
+  .screen-url{flex:1;margin:0 10px;background:#0d1829;border:1px solid var(--border);
+    border-radius:5px;padding:4px 10px;font-size:11px;color:var(--mute);font-family:monospace}
+  .screen-caption{font-size:11px;color:var(--mute);text-align:center;padding:8px 0 4px;
+    font-style:italic;border-top:1px solid var(--border);background:#0a1020}
+  .screen-inner{padding:0;background:var(--panelAlt)}
+
+  /* mock sidebar */
+  .mock-layout{display:flex;height:340px;overflow:hidden}
+  .mock-sidebar{width:190px;background:#0a1020;border-right:1px solid var(--border);
+    display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+  .mock-sb-header{padding:10px 12px;border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,#0d1829,#111827);display:flex;align-items:center;gap:8px}
+  .mock-sb-logo{width:28px;height:28px;border-radius:6px;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+  .mock-sb-title{font-size:11px;font-weight:800;color:var(--text)}
+  .mock-sb-sub{font-size:9px;color:var(--mute)}
+  .mock-sb-nav{padding:8px 6px;flex:1;overflow:hidden}
+  .mock-nav-label{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--mute);padding:4px 6px 6px}
+  .mock-nav-item{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;
+    font-size:10px;color:var(--sub);cursor:default}
+  .mock-nav-item.active{background:var(--accent)18;color:var(--accent)}
+  .mock-nav-sub{margin-left:10px;padding-left:6px;border-left:2px solid var(--accent)40;font-size:9px}
+  .mock-content{flex:1;overflow:hidden;padding:14px;background:#060d18}
+  .mock-topbar{background:#0d1829;border-bottom:1px solid var(--border);padding:7px 14px;
+    display:flex;align-items:center;gap:10px}
+  .mock-vc-sel{background:#111827;border:1px solid var(--border);border-radius:5px;
+    padding:3px 8px;font-size:10px;color:var(--sub);display:flex;align-items:center;gap:5px}
+  .mock-search{flex:1;max-width:200px;background:#111827;border:1px solid var(--border);
+    border-radius:5px;padding:3px 8px;font-size:10px;color:var(--mute)}
+  .mock-avatar{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--cyan));
+    font-size:10px;display:flex;align-items:center;justify-content:center;margin-left:auto}
+  .mock-page{flex:1;padding:12px;overflow:hidden}
+
+  /* mock banner */
+  .mock-banner{background:linear-gradient(135deg,#0d1829,#111827);border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .mock-banner-hdr{padding:8px 12px;background:linear-gradient(135deg,#3b82f612,#06b6d408,#111827);
+    border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .mock-banner-icon{width:24px;height:24px;border-radius:6px;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));
+    display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+  .mock-banner-title{font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;
+    background:linear-gradient(90deg,var(--accent),var(--cyan));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .mock-platforms{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--border)}
+  .mock-plat{padding:6px 10px;display:flex;align-items:center;gap:6px;border-right:1px solid var(--border)}
+  .mock-plat:last-child{border-right:none}
+  .mock-plat-dot{width:6px;height:6px;border-radius:50%}
+  .mock-plat-label{font-size:9px;font-weight:700;color:var(--text)}
+  .mock-plat-count{font-size:8px;color:var(--sub)}
+  .mock-kpis{display:grid;grid-template-columns:repeat(5,1fr)}
+  .mock-kpi{padding:6px 8px;text-align:center;border-right:1px solid var(--border)}
+  .mock-kpi:last-child{border-right:none}
+  .mock-kpi-val{font-size:14px;font-weight:900;font-family:monospace;line-height:1}
+  .mock-kpi-lbl{font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+    color:var(--mute);margin-top:2px}
+  .mock-kpi-sub{font-size:7px;color:var(--mute);margin-top:1px}
+
+  /* mock vm table */
+  .mock-table{width:100%;border-collapse:collapse;font-size:9px}
+  .mock-table th{background:#1e293b;color:var(--accent);padding:5px 8px;text-align:left;
+    font-weight:700;letter-spacing:.5px;font-size:8px;border-bottom:1px solid var(--border)}
+  .mock-table td{padding:5px 8px;border-bottom:1px solid var(--border)18;color:var(--sub)}
+  .mock-table tr:hover td{background:var(--accent)07}
+  .mock-status{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:3px;
+    font-size:8px;font-weight:700}
+  .mock-action-btn{background:var(--accent)15;border:1px solid var(--accent)30;border-radius:3px;
+    padding:1px 4px;font-size:8px;color:var(--accent);display:inline-block;margin:0 1px}
+
+  /* mock gauge */
+  .mock-gauge-wrap{display:flex;gap:12px;padding:10px}
+  .mock-gauge{flex:1;background:#0d1829;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+  .mock-gauge-arc{width:70px;height:40px;margin:0 auto 6px;position:relative;overflow:hidden}
+  .mock-gauge-label{font-size:9px;font-weight:700;color:var(--text)}
+  .mock-gauge-val{font-size:14px;font-weight:900;font-family:monospace}
+  .mock-bar-row{display:flex;align-items:center;gap:6px;margin:3px 0}
+  .mock-bar-label{font-size:8px;color:var(--mute);min-width:28px}
+  .mock-bar-track{flex:1;height:5px;background:#1e293b;border-radius:3px;overflow:hidden}
+  .mock-bar-fill{height:100%;border-radius:3px}
+
+  /* mock login */
+  .mock-login{min-height:260px;background:linear-gradient(145deg,#060d18,#0d1829);
+    display:flex;align-items:center;justify-content:center}
+  .mock-login-card{background:#111827;border:1px solid var(--border);border-radius:10px;
+    padding:24px 28px;width:240px;text-align:center}
+  .mock-input{width:100%;background:#0d1829;border:1px solid var(--border);border-radius:5px;
+    padding:6px 10px;font-size:10px;color:var(--sub);margin:4px 0 8px;text-align:left}
+  .mock-btn{width:100%;padding:7px;border-radius:5px;font-size:10px;font-weight:700;
+    background:linear-gradient(135deg,var(--accent),var(--cyan));color:#fff;border:none;margin-top:4px}
+
+  /* mock ocp */
+  .mock-ocp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px}
+  .mock-ocp-card{background:#0d1829;border:1px solid var(--border);border-radius:7px;padding:10px}
+  .mock-ocp-title{font-size:9px;font-weight:800;color:var(--text);margin-bottom:4px}
+  .mock-ocp-kpi{display:flex;justify-content:space-between;margin:3px 0}
+  .mock-ocp-key{font-size:8px;color:var(--mute)}
+  .mock-ocp-v{font-size:9px;font-weight:700}
+
+  /* mock snap table */
+  .mock-snap-toolbar{padding:6px 10px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:6px;background:#0a1020}
+  .mock-snap-search{background:#0d1829;border:1px solid var(--border);border-radius:4px;
+    padding:3px 7px;font-size:9px;color:var(--mute);min-width:140px}
+  .mock-snap-btn{background:var(--red)18;border:1px solid var(--red)30;border-radius:4px;
+    padding:3px 7px;font-size:9px;color:var(--red)}
+  .mock-age-badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8px;font-weight:700}
+
+  @media print{
+    /* ── GENERAL PRINT SETUP ── */
+    *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+    .sticky-nav{display:none!important}
+
+    /* Keep dark theme — do NOT set body to white */
+    html,body{background:#060d18!important;color:#e2e8f0!important}
+
+    /* Page geometry */
+    @page{size:A4;margin:14mm 12mm}
+
+    /* ── PREVENT SCREENSHOT SPLITS ── */
+    .screenshot-wrap{
+      page-break-inside:avoid!important;
+      break-inside:avoid!important;
+      display:block;
+      margin-bottom:28px
+    }
+    .screen-bar,.screen-caption{page-break-inside:avoid!important;break-inside:avoid!important}
+
+    /* Keep sections together where possible; force new page before major sections */
+    .section{page-break-inside:avoid!important;break-inside:avoid!important;margin:32px 0}
+    .section-header{page-break-after:avoid!important;break-after:avoid!important}
+
+    /* Cards, feature grids, steps — keep together */
+    .card{page-break-inside:avoid!important;break-inside:avoid!important}
+    .feat-card{page-break-inside:avoid!important;break-inside:avoid!important}
+    .step{page-break-inside:avoid!important;break-inside:avoid!important}
+
+    /* Cover: compact for print */
+    .cover{min-height:auto!important;padding:60px 40px!important;page-break-after:always!important;break-after:page!important}
+    .cover-title{-webkit-text-fill-color:#fff!important;color:#fff!important}
+    .cover-grid{display:none}
+
+    /* TOC on its own page */
+    .toc{page-break-after:always!important;break-after:page!important}
+
+    /* Fix gradient text — ensure it's visible */
+    .mock-banner-title{-webkit-text-fill-color:var(--cyan)!important;color:var(--cyan)!important}
+    .section-title{-webkit-text-fill-color:var(--text)!important;color:#e2e8f0!important}
+
+    /* Ensure all inline dark backgrounds in screenshots are printed */
+    .mock-login,
+    .mock-layout,
+    .mock-sidebar,
+    .mock-content,
+    .mock-topbar,
+    .mock-banner,
+    .mock-snap-toolbar,
+    .mock-ocp-grid,
+    .screenshot-wrap > div:nth-child(2){background-color:inherit!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- STICKY NAV -->
+<nav class="sticky-nav">
+  <div class="nav-brand">⚡ LaaS Portal</div>
+  <div class="nav-items">
+    <a class="nav-link-top" href="#intro">Introduction</a>
+    <a class="nav-link-top" href="#quickstart">Quick Start</a>
+    <a class="nav-link-top" href="#navigation">Navigation</a>
+    <a class="nav-link-top" href="#vmware">VMware</a>
+    <a class="nav-link-top" href="#openshift">OpenShift</a>
+    <a class="nav-link-top" href="#nutanix">Nutanix</a>
+    <a class="nav-link-top" href="#ansible">Ansible</a>
+    <a class="nav-link-top" href="#capacity">Capacity</a>
+    <a class="nav-link-top" href="#roles">Roles</a>
+    <a class="nav-link-top" href="#techspecs">Tech Specs</a>
+    <a class="nav-link-top" href="#faq">FAQ</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════ COVER ═══════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-grid"></div>
+  <div class="cover-badge">📖 End User Manual &amp; Technical Reference</div>
+  <div class="cover-logo">⚡</div>
+  <div class="cover-title">LaaS Portal</div>
+  <div class="cover-sub">Lab as a Service &nbsp;·&nbsp; Unified Infrastructure Management Platform</div>
+  <div class="cover-divider"></div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><span class="cover-meta-label">Version</span><span class="cover-meta-val">6.0</span></div>
+    <div class="cover-meta-item"><span class="cover-meta-label">Date</span><span class="cover-meta-val">March 2026</span></div>
+    <div class="cover-meta-item"><span class="cover-meta-label">Prepared By</span><span class="cover-meta-val">Sekhar Perumal</span></div>
+    <div class="cover-meta-item"><span class="cover-meta-label">Approved By</span><span class="cover-meta-val">Khalid Khan</span></div>
+    <div class="cover-meta-item"><span class="cover-meta-label">Organization</span><span class="cover-meta-val">Wipro SDX INFRA &amp; DC Ops</span></div>
+  </div>
+  <div class="cover-platforms">
+    <div class="platform-chip" style="border-color:#3b82f640;color:#60a5fa;background:#3b82f610">🖥️ VMware vCenter</div>
+    <div class="platform-chip" style="border-color:#ef444440;color:#f87171;background:#ef444410">🔴 Red Hat OpenShift</div>
+    <div class="platform-chip" style="border-color:#22c55e40;color:#4ade80;background:#22c55e10">🟦 Nutanix AHV</div>
+    <div class="platform-chip" style="border-color:#f9731640;color:#fb923c;background:#f9731610">🎛️ Ansible AAP</div>
+    <div class="platform-chip" style="border-color:#8b5cf640;color:#a78bfa;background:#8b5cf610">📡 IPAM</div>
+  </div>
+</div>
+
+<div class="page-wrap">
+
+<!-- ═══════════════════════════════════ TOC ═══════════════════════════════════ -->
+<div class="toc">
+  <div class="toc-title">Table of Contents</div>
+  <div class="toc-sub">Click any item to jump to that section</div>
+  <div class="toc-grid">
+    <a href="#intro"        class="toc-item"><span class="toc-num">01</span><span class="toc-label">Introduction &amp; About LaaS Portal</span></a>
+    <a href="#sysreq"       class="toc-item"><span class="toc-num">02</span><span class="toc-label">System Requirements</span></a>
+    <a href="#quickstart"   class="toc-item"><span class="toc-num">03</span><span class="toc-label">Quick Start Guide</span></a>
+    <a href="#navigation"   class="toc-item"><span class="toc-num">04</span><span class="toc-label">Navigation &amp; UI Overview</span></a>
+    <a href="#overview"     class="toc-item"><span class="toc-num">05</span><span class="toc-label">Overview Dashboard</span></a>
+    <a href="#vmware"       class="toc-item"><span class="toc-num">06</span><span class="toc-label">VMware Module</span></a>
+    <a href="#snapshots"    class="toc-item"><span class="toc-num">07</span><span class="toc-label">Snapshot Management</span></a>
+    <a href="#openshift"    class="toc-item"><span class="toc-num">08</span><span class="toc-label">Red Hat OpenShift Module</span></a>
+    <a href="#nutanix"      class="toc-item"><span class="toc-num">09</span><span class="toc-label">Nutanix AHV Module</span></a>
+    <a href="#ansible"      class="toc-item"><span class="toc-num">10</span><span class="toc-label">Ansible AAP Module</span></a>
+    <a href="#capacity"     class="toc-item"><span class="toc-num">11</span><span class="toc-label">Capacity Planning</span></a>
+    <a href="#utilization"  class="toc-item"><span class="toc-num">12</span><span class="toc-label">Project Utilization</span></a>
+    <a href="#chargeback"   class="toc-item"><span class="toc-num">13</span><span class="toc-label">Chargeback</span></a>
+    <a href="#networks"     class="toc-item"><span class="toc-num">14</span><span class="toc-label">Networks &amp; IPAM</span></a>
+    <a href="#requests"     class="toc-item"><span class="toc-num">15</span><span class="toc-label">VM Requests Workflow</span></a>
+    <a href="#audit"        class="toc-item"><span class="toc-num">16</span><span class="toc-label">Audit Log</span></a>
+    <a href="#roles"        class="toc-item"><span class="toc-num">17</span><span class="toc-label">User Roles &amp; Permissions</span></a>
+    <a href="#techspecs"    class="toc-item"><span class="toc-num">18</span><span class="toc-label">Technical Specifications</span></a>
+    <a href="#faq"          class="toc-item"><span class="toc-num">19</span><span class="toc-label">FAQ &amp; Troubleshooting</span></a>
+    <a href="#auth"         class="toc-item"><span class="toc-num">20</span><span class="toc-label">Document Authorization</span></a>
+  </div>
+</div>
+
+<!-- ═══════════ 01 INTRODUCTION ═══════════ -->
+<div class="section" id="intro">
+  <div class="section-header">
+    <div class="section-icon">🌐</div>
+    <div>
+      <div class="section-title">1. Introduction &amp; About LaaS Portal</div>
+      <div class="section-desc">What is LaaS and why it exists</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    The <strong style="color:var(--text)">LaaS Portal (Lab as a Service)</strong> is Wipro's unified infrastructure management platform for SDX INFRA &amp; DC Operations. It provides a single-pane-of-glass web dashboard to manage, monitor, and operate multi-cloud and on-premises resources across VMware vCenter, Red Hat OpenShift, Nutanix AHV, and Ansible Automation Platform.
+    <br/><br/>
+    The portal eliminates the need to log in to individual vCenter/OCP/Nutanix consoles for routine operations. It consolidates health monitoring, VM lifecycle management, capacity reporting, IP address management, chargeback, and audit logging into a single role-based access-controlled interface accessible from any modern browser.
+  </div></div>
+
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon">🖥️</div>
+      <div class="feat-title">Unified Multi-Platform View</div>
+      <div class="feat-desc">Single dashboard for VMware, OpenShift, Nutanix, and Ansible — no separate logins needed.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">⚡</div>
+      <div class="feat-title">VM Lifecycle Management</div>
+      <div class="feat-desc">Power on/off, clone, migrate, snapshot, and delete VMs directly from the portal.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📊</div>
+      <div class="feat-title">Capacity Planning</div>
+      <div class="feat-desc">CPU, RAM, and storage utilization trends with forecasting gauges across all environments.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔒</div>
+      <div class="feat-title">Role-Based Access Control</div>
+      <div class="feat-desc">Admin, Operator, Viewer, and Requester roles with granular permission enforcement.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📋</div>
+      <div class="feat-title">VM Request &amp; Approval Workflow</div>
+      <div class="feat-desc">Requesters raise VM provisioning requests; Admins approve or reject with full audit trail.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">💳</div>
+      <div class="feat-title">Automated Chargeback</div>
+      <div class="feat-desc">Project-based cost allocation with monthly PDF/CSV export and visualized cost breakdown.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📡</div>
+      <div class="feat-title">IPAM Integration</div>
+      <div class="feat-desc">Live IP address management — subnet occupancy, free IPs, and allocation history.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔍</div>
+      <div class="feat-title">Full Audit Log</div>
+      <div class="feat-desc">Every action is logged with user, timestamp, and affected resource for compliance reporting.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 02 SYSTEM REQUIREMENTS ═══════════ -->
+<div class="section" id="sysreq">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#10b981,#06b6d4)">💻</div>
+    <div>
+      <div class="section-title">2. System Requirements</div>
+      <div class="section-desc">Browser, OS, and network prerequisites for end users</div>
+    </div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val" style="color:var(--green)">Chrome 110+</div><div class="kpi-label">Recommended Browser</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--accent)">Edge 110+</div><div class="kpi-label">Also Supported</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--cyan)">Firefox 115+</div><div class="kpi-label">Also Supported</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--yellow)">1920×1080</div><div class="kpi-label">Optimal Resolution</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:var(--purple)">LAN/VPN</div><div class="kpi-label">Network Access</div></div>
+  </div>
+  <table class="spec-table">
+    <tr><td>Supported Browsers</td><td>Google Chrome 110+, Microsoft Edge 110+, Mozilla Firefox 115+, Safari 16+</td></tr>
+    <tr><td>JavaScript</td><td>Must be enabled (portal is a React SPA)</td></tr>
+    <tr><td>Screen Resolution</td><td>Minimum 1280×768 · Recommended 1920×1080 or higher</td></tr>
+    <tr><td>Network</td><td>Corporate LAN or VPN connection to the portal server required</td></tr>
+    <tr><td>Portal URL</td><td><code>http://&lt;server-ip&gt;:5173</code> (development) · <code>http://&lt;server-ip&gt;:80</code> (production)</td></tr>
+    <tr><td>Authentication</td><td>Username + Password (local accounts, managed by admin)</td></tr>
+    <tr><td>Session Timeout</td><td>Auto-logout after 30 minutes of inactivity</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════ 03 QUICK START ═══════════ -->
+<div class="section" id="quickstart">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#f59e0b,#ef4444)">🚀</div>
+    <div>
+      <div class="section-title">3. Quick Start Guide</div>
+      <div class="section-desc">Get up and running in 5 minutes</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Getting Started</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Open the Portal</div>
+          <div class="step-body">Navigate to <code>http://&lt;server-ip&gt;</code> in your browser. Ensure you are connected to the corporate network or VPN.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Log In</div>
+          <div class="step-body">Enter your username and password on the login screen. If you don't have credentials, contact your Admin. Default demo credentials: <code>admin / admin123</code>.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Select Environment</div>
+          <div class="step-body">Use the vCenter dropdown in the top bar to choose a specific vCenter or "All vCenters" for an aggregated view. The Overview dashboard updates automatically.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Explore the Dashboard</div>
+          <div class="step-body">The <strong>Overview</strong> page shows your SDx Infrastructure banner with live counts for VMs, hosts, OCP nodes, pods, and Nutanix resources. KPI cards show current utilisation.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-title">Navigate by Platform</div>
+          <div class="step-body">Use the left sidebar to switch between VMware, OpenShift, Nutanix, Ansible, IPAM, and other modules. Snapshots appears nested under VMware.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="callout callout-tip">
+    <div class="callout-icon">💡</div>
+    <div class="callout-text"><strong>Tip:</strong> Press <code>Ctrl+K</code> or use the 🔍 global search bar to instantly jump to any VM, snapshot, OCP cluster, or menu item.</div>
+  </div>
+
+  <!-- SCREENSHOT: Login -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">🔒 http://laas-portal.wipro.internal</div>
+    </div>
+    <div class="screen-inner">
+      <div class="mock-login">
+        <div class="mock-login-card">
+          <div style="width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#3b82f6,#06b6d4);display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 12px">⚡</div>
+          <div style="font-size:14px;font-weight:800;color:#e2e8f0;margin-bottom:2px">LaaS Portal</div>
+          <div style="font-size:10px;color:#475569;margin-bottom:18px">Sign in to continue</div>
+          <div style="font-size:9px;color:#64748b;text-align:left;margin-bottom:2px">Username</div>
+          <div class="mock-input">admin</div>
+          <div style="font-size:9px;color:#64748b;text-align:left;margin-bottom:2px">Password</div>
+          <div class="mock-input">••••••••</div>
+          <div class="mock-btn">Sign In →</div>
+          <div style="font-size:9px;color:#475569;margin-top:12px">Wipro SDX INFRA &amp; DC Operations</div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 1 — LaaS Portal login screen</div>
+  </div>
+</div>
+
+<!-- ═══════════ 04 NAVIGATION ═══════════ -->
+<div class="section" id="navigation">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#8b5cf6,#3b82f6)">🗺️</div>
+    <div>
+      <div class="section-title">4. Navigation &amp; UI Overview</div>
+      <div class="section-desc">Understanding the portal layout and sidebar</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Portal Layout — Three Zones</div>
+    <div class="feat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="feat-card">
+        <div class="feat-icon">📌</div>
+        <div class="feat-title">Left Sidebar</div>
+        <div class="feat-desc">Navigation links, Solution Sphere analog clock, multi-platform live health status (VMware / OCP / Nutanix).</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔝</div>
+        <div class="feat-title">Top Bar</div>
+        <div class="feat-desc">vCenter selector, global search, dark/light theme toggle, user profile, and notification bell.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📄</div>
+        <div class="feat-title">Main Content Area</div>
+        <div class="feat-desc">Page-specific content: dashboards, tables, forms, charts — updates per selected navigation item.</div>
+      </div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Sidebar Navigation Items</div>
+    <table class="role-table">
+      <thead><tr><th>Icon</th><th>Label</th><th>Description</th><th>Roles</th></tr></thead>
+      <tbody>
+        <tr><td>🏠</td><td>Overview</td><td>SDx Infrastructure banner, platform health, KPI cards, vCenter summaries</td><td><span class="badge badge-blue">All</span></td></tr>
+        <tr><td>🖥️</td><td>VMware</td><td>VM list, actions (power/clone/migrate/snapshot), filter, search</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td style="padding-left:28px">📸</td><td style="padding-left:8px">↳ Snapshots</td><td>All VM snapshots, create/delete, age tracking — nested under VMware</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🔴</td><td>Red Hat OpenShift</td><td>Cluster status, node/pod/operator health, resource usage</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🟦</td><td>Nutanix</td><td>Prism Central overview, cluster/VM/storage health</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🎛️</td><td>Ansible AAP</td><td>Job templates, inventory, recent job runs, launch jobs</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🏷️</td><td>Project Utilization</td><td>Per-project VM, CPU, RAM, storage allocation breakdown</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🗄️</td><td>Capacity</td><td>CPU/RAM/storage gauges, trend charts, datastore details</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>💳</td><td>Chargeback</td><td>Monthly cost by project, export to PDF/CSV</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🌐</td><td>Networks</td><td>vCenter port groups, VLANs, connected VMs</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>📡</td><td>IPAM</td><td>Subnet overview, IP allocation table, free IP finder</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>🗃️</td><td>Asset Mgmt</td><td>Physical and virtual asset inventory</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span> <span class="badge badge-yellow">Viewer</span></td></tr>
+        <tr><td>📋</td><td>VM Requests</td><td>Raise new VM request, view pending/approved/rejected requests</td><td><span class="badge badge-blue">All</span></td></tr>
+        <tr><td>🔍</td><td>Audit Log</td><td>Complete action history with filters by user, date, action type</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span></td></tr>
+        <tr><td>🌲</td><td>AD &amp; DNS</td><td>Active Directory and DNS record management</td><td><span class="badge badge-blue">Admin</span> <span class="badge badge-green">Operator</span></td></tr>
+        <tr><td>👥</td><td>Users &amp; Roles</td><td>Create/edit users, assign roles, manage accounts</td><td><span class="badge badge-blue">Admin only</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SCREENSHOT: Portal layout -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ LaaS Portal — Overview</div>
+    </div>
+    <div class="screen-inner">
+      <!-- Top bar -->
+      <div class="mock-topbar">
+        <div class="mock-vc-sel">🖥️ All vCenters ▾</div>
+        <div class="mock-search">🔍  Search VMs, clusters, snapshots…</div>
+        <span style="font-size:10px;color:#475569">🌙</span>
+        <span style="font-size:10px;color:#475569;margin-left:6px">🔔</span>
+        <div class="mock-avatar">A</div>
+      </div>
+      <!-- Body: sidebar + content -->
+      <div class="mock-layout">
+        <div class="mock-sidebar">
+          <div class="mock-sb-header">
+            <div class="mock-sb-logo">⚡</div>
+            <div><div class="mock-sb-title">LaaS Portal</div><div class="mock-sb-sub">Lab as a Service</div></div>
+          </div>
+          <div class="mock-sb-nav">
+            <div class="mock-nav-label">Navigation</div>
+            <div class="mock-nav-item active">🏠 Overview</div>
+            <div class="mock-nav-item">🖥️ VMware</div>
+            <div class="mock-nav-item mock-nav-sub">📸 Snapshots</div>
+            <div class="mock-nav-item">🔴 Red Hat OpenShift</div>
+            <div class="mock-nav-item">🟦 Nutanix</div>
+            <div class="mock-nav-item">🎛️ Ansible AAP</div>
+            <div class="mock-nav-item">🏷️ Project Utilization</div>
+            <div class="mock-nav-item">🗄️ Capacity</div>
+            <div class="mock-nav-item">💳 Chargeback</div>
+            <div class="mock-nav-item">🌐 Networks</div>
+            <div class="mock-nav-item">📡 IPAM</div>
+            <div class="mock-nav-item">📋 VM Requests <span style="background:#3b82f618;color:#3b82f6;padding:0 4px;border-radius:3px;font-size:8px;margin-left:auto">3</span></div>
+          </div>
+          <div style="padding:8px 10px;border-top:1px solid #1e293b;background:#0a1020;font-size:9px;color:#475569;text-align:center">
+            <div style="margin-bottom:4px;font-weight:700;color:#06b6d4">🕐 Solution Sphere</div>
+            <div>🖥️ 2 vCenters &nbsp;✅</div>
+            <div>🔴 1 Cluster &nbsp;✅</div>
+            <div>🟦 1 Prism Central &nbsp;✅</div>
+          </div>
+        </div>
+        <div class="mock-content">
+          <div class="mock-banner">
+            <div class="mock-banner-hdr">
+              <div class="mock-banner-icon">⚡</div>
+              <div><div class="mock-banner-title">SDx Infrastructure Overview</div><div style="font-size:8px;color:#475569">Unified view across all managed platforms · LaaS Portal</div></div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:4px"><div style="width:6px;height:6px;border-radius:50%;background:#10b981"></div><span style="font-size:8px;color:#10b981;font-weight:700">All Platforms Healthy</span></div>
+            </div>
+            <div class="mock-platforms">
+              <div class="mock-plat"><div class="mock-plat-dot" style="background:#3b82f6"></div><div><div class="mock-plat-label">VMware vCenter</div><div class="mock-plat-count">2 vCenters ✅</div></div></div>
+              <div class="mock-plat"><div class="mock-plat-dot" style="background:#ef4444"></div><div><div class="mock-plat-label">Red Hat OpenShift</div><div class="mock-plat-count">1 cluster ✅</div></div></div>
+              <div class="mock-plat"><div class="mock-plat-dot" style="background:#22c55e"></div><div><div class="mock-plat-label">Nutanix AHV</div><div class="mock-plat-count">1 Prism Central ✅</div></div></div>
+            </div>
+            <div class="mock-kpis">
+              <div class="mock-kpi"><div class="mock-kpi-val" style="color:#10b981">247</div><div class="mock-kpi-lbl">Total VMs</div><div class="mock-kpi-sub">189 running</div></div>
+              <div class="mock-kpi"><div class="mock-kpi-val" style="color:#3b82f6">12</div><div class="mock-kpi-lbl">ESXi Hosts</div><div class="mock-kpi-sub">12 connected</div></div>
+              <div class="mock-kpi"><div class="mock-kpi-val" style="color:#ef4444">9</div><div class="mock-kpi-lbl">OCP Nodes</div><div class="mock-kpi-sub">9 ready</div></div>
+              <div class="mock-kpi"><div class="mock-kpi-val" style="color:#22c55e">6</div><div class="mock-kpi-lbl">Nutanix Hosts</div><div class="mock-kpi-sub">48 VMs managed</div></div>
+              <div class="mock-kpi"><div class="mock-kpi-val" style="color:#06b6d4">312</div><div class="mock-kpi-lbl">OCP Pods</div><div class="mock-kpi-sub">running containers</div></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+            <div style="background:#0d1829;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:14px;font-weight:900;color:#10b981;font-family:monospace">189</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Running VMs</div></div>
+            <div style="background:#0d1829;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:14px;font-weight:900;color:#3b82f6;font-family:monospace">12/12</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px">ESXi Hosts</div></div>
+            <div style="background:#0d1829;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:14px;font-weight:900;color:#10b981;font-family:monospace">0</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Active Alerts</div></div>
+            <div style="background:#0d1829;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center"><div style="font-size:14px;font-weight:900;color:#10b981;font-family:monospace">62%</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Storage Free</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 2 — Portal layout: left sidebar navigation, top bar, and Overview dashboard main content area</div>
+  </div>
+</div>
+
+<!-- ═══════════ 05 OVERVIEW ═══════════ -->
+<div class="section" id="overview">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#3b82f6,#06b6d4)">🏠</div>
+    <div>
+      <div class="section-title">5. Overview Dashboard</div>
+      <div class="section-desc">Your single-pane-of-glass for all platforms</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">SDx Infrastructure Overview Banner</div>
+    <div class="card-body">The large banner at the top of the Overview page shows live aggregate statistics across all managed platforms:<br/><br/>
+    <strong>Platform Pills Row:</strong> VMware vCenter count · Red Hat OpenShift cluster count · Nutanix Prism Central count — each with a live health indicator (healthy/degraded/critical).<br/><br/>
+    <strong>KPI Cards Row (5 cards):</strong>
+    <ul style="margin:10px 0 0 18px;line-height:2">
+      <li>💻 <strong>Total VMs</strong> — sum of VMware + Nutanix VMs</li>
+      <li>🗄️ <strong>ESXi Hosts</strong> — total connected ESXi hosts</li>
+      <li>🔴 <strong>OCP Nodes</strong> — total OpenShift nodes with ready count</li>
+      <li>🟩 <strong>Nutanix Hosts</strong> — AHV hosts with managed VM count</li>
+      <li>📦 <strong>OCP Pods</strong> — running container pods</li>
+    </ul>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Below the Banner</div>
+    <div class="card-body">
+      • <strong>Environment Charts Panel</strong> — side-by-side bar/gauge charts for VMware CPU/RAM, OCP cluster utilisation, Nutanix storage.<br/>
+      • <strong>vCenter Summary Cards</strong> (when "All vCenters" selected) — per-vCenter CPU/RAM/Storage bars with VM/Host counts.<br/>
+      • <strong>Quick KPI Cards</strong> — Running VMs, ESXi Hosts, Active Alerts, Storage Free.<br/>
+      • <strong>Capacity Detail cards</strong> — Full CPU/RAM/Storage resource rows with utilisation bars.
+    </div>
+  </div>
+
+  <!-- SCREENSHOT: Overview banner -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ Overview — SDx Infrastructure Overview</div>
+    </div>
+    <div class="screen-inner" style="padding:14px">
+      <div class="mock-banner" style="margin:0">
+        <div class="mock-banner-hdr">
+          <div class="mock-banner-icon">⚡</div>
+          <div style="flex:1">
+            <div class="mock-banner-title">SDx Infrastructure Overview</div>
+            <div style="font-size:8px;color:#475569">Unified view across all managed platforms · LaaS Portal</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:7px;height:7px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b98180"></div>
+            <span style="font-size:9px;color:#10b981;font-weight:700">All Platforms Healthy</span>
+          </div>
+        </div>
+        <div class="mock-platforms">
+          <div class="mock-plat">
+            <div style="width:28px;height:28px;border-radius:6px;background:#3b82f618;border:1px solid #3b82f630;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🖥️</div>
+            <div style="margin-left:6px"><div class="mock-plat-label">VMware vCenter</div><div style="font-size:8px;color:#3b82f6;font-weight:600">2 vCenters</div></div>
+            <div style="margin-left:auto;text-align:right"><div class="mock-plat-dot" style="background:#10b981;width:7px;height:7px;border-radius:50%;margin-left:auto"></div><div style="font-size:8px;color:#10b981;font-weight:700">healthy</div></div>
+          </div>
+          <div class="mock-plat">
+            <div style="width:28px;height:28px;border-radius:6px;background:#ef444418;border:1px solid #ef444430;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🔴</div>
+            <div style="margin-left:6px"><div class="mock-plat-label">Red Hat OpenShift</div><div style="font-size:8px;color:#ef4444;font-weight:600">1 cluster</div></div>
+            <div style="margin-left:auto;text-align:right"><div class="mock-plat-dot" style="background:#10b981;width:7px;height:7px;border-radius:50%;margin-left:auto"></div><div style="font-size:8px;color:#10b981;font-weight:700">healthy</div></div>
+          </div>
+          <div class="mock-plat" style="border-right:none">
+            <div style="width:28px;height:28px;border-radius:6px;background:#22c55e18;border:1px solid #22c55e30;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">🟩</div>
+            <div style="margin-left:6px"><div class="mock-plat-label">Nutanix AHV</div><div style="font-size:8px;color:#22c55e;font-weight:600">1 Prism Central</div></div>
+            <div style="margin-left:auto;text-align:right"><div class="mock-plat-dot" style="background:#10b981;width:7px;height:7px;border-radius:50%;margin-left:auto"></div><div style="font-size:8px;color:#10b981;font-weight:700">healthy</div></div>
+          </div>
+        </div>
+        <div class="mock-kpis">
+          <div class="mock-kpi"><div style="font-size:9px;margin-bottom:3px">💻</div><div class="mock-kpi-val" style="color:#10b981">247</div><div class="mock-kpi-lbl">Total VMs</div><div class="mock-kpi-sub">189 running</div></div>
+          <div class="mock-kpi"><div style="font-size:9px;margin-bottom:3px">🗄️</div><div class="mock-kpi-val" style="color:#3b82f6">12</div><div class="mock-kpi-lbl">ESXi Hosts</div><div class="mock-kpi-sub">12 connected</div></div>
+          <div class="mock-kpi"><div style="font-size:9px;margin-bottom:3px">🔴</div><div class="mock-kpi-val" style="color:#ef4444">9</div><div class="mock-kpi-lbl">OCP Nodes</div><div class="mock-kpi-sub">9 ready</div></div>
+          <div class="mock-kpi"><div style="font-size:9px;margin-bottom:3px">🟩</div><div class="mock-kpi-val" style="color:#22c55e">6</div><div class="mock-kpi-lbl">Nutanix Hosts</div><div class="mock-kpi-sub">48 VMs managed</div></div>
+          <div class="mock-kpi"><div style="font-size:9px;margin-bottom:3px">📦</div><div class="mock-kpi-val" style="color:#06b6d4">312</div><div class="mock-kpi-lbl">OCP Pods</div><div class="mock-kpi-sub">running containers</div></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">
+        <div style="background:#0d1829;border:1px solid #10b98130;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">🖥️</div><div style="font-size:20px;font-weight:900;color:#10b981;font-family:monospace">189</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Running VMs</div><div style="font-size:8px;color:#475569">58 stopped · 247 total</div></div>
+        <div style="background:#0d1829;border:1px solid #3b82f630;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">🗄️</div><div style="font-size:20px;font-weight:900;color:#3b82f6;font-family:monospace">12/12</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">ESXi Hosts</div><div style="font-size:8px;color:#475569">0 disconnected</div></div>
+        <div style="background:#0d1829;border:1px solid #10b98130;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">🔔</div><div style="font-size:20px;font-weight:900;color:#10b981;font-family:monospace">0</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Active Alerts</div><div style="font-size:8px;color:#475569">0 errors · 0 warnings</div></div>
+        <div style="background:#0d1829;border:1px solid #10b98130;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">💾</div><div style="font-size:20px;font-weight:900;color:#10b981;font-family:monospace">62%</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Storage Free</div><div style="font-size:8px;color:#475569">186 GB available</div></div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 3 — Overview page: SDx Infrastructure Overview banner with platform pills, KPI cards, and quick summary cards</div>
+  </div>
+</div>
+
+<!-- ═══════════ 06 VMWARE ═══════════ -->
+<div class="section" id="vmware">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">🖥️</div>
+    <div>
+      <div class="section-title">6. VMware Module</div>
+      <div class="section-desc">Managing virtual machines across vCenter environments</div>
+    </div>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon">🔍</div>
+      <div class="feat-title">Search &amp; Filter</div>
+      <div class="feat-desc">Search VMs by name, IP, OS, or project. Filter by power state (running/stopped/suspended) and host.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">⚡</div>
+      <div class="feat-title">Power Operations</div>
+      <div class="feat-desc">Power On, Power Off, and Reboot VMs directly from the portal. Requires Operator or Admin role.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🖨️</div>
+      <div class="feat-title">Clone VM</div>
+      <div class="feat-desc">Clone any VM to a new name. Choose target host and datastore interactively.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">✈️</div>
+      <div class="feat-title">Live Migrate</div>
+      <div class="feat-desc">vMotion a running VM to another ESXi host without downtime. Requires Admin or Operator role.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📸</div>
+      <div class="feat-title">Snapshot</div>
+      <div class="feat-desc">Create a point-in-time snapshot of any VM. Snapshots are visible in the Snapshot count column.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🗑️</div>
+      <div class="feat-title">Delete VM</div>
+      <div class="feat-desc">Permanently delete a VM and all its files from disk. Requires Admin role with confirmation.</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">VM Table Columns</div>
+    <table class="role-table">
+      <thead><tr><th>Column</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>VM Name</td><td>Display name of the virtual machine</td></tr>
+        <tr><td>Status</td><td>Power state: <span class="badge badge-green">Running</span> <span class="badge badge-gray">Stopped</span> <span class="badge badge-yellow">Suspended</span></td></tr>
+        <tr><td>IP Address</td><td>Primary guest IP (requires VMware Tools installed)</td></tr>
+        <tr><td>OS</td><td>Guest OS type detected via VMware Tools</td></tr>
+        <tr><td>CPU / RAM</td><td>vCPU count and allocated RAM in GB</td></tr>
+        <tr><td>Host</td><td>ESXi host the VM is currently running on</td></tr>
+        <tr><td>Snapshots</td><td>📸 count badge — click to view/delete snapshots</td></tr>
+        <tr><td>Uptime</td><td>How long the VM has been powered on</td></tr>
+        <tr><td>Actions</td><td>Power · Snapshot · Clone · Migrate · Delete buttons</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout callout-warn">
+    <div class="callout-icon">⚠️</div>
+    <div class="callout-text"><strong>Warning:</strong> "Delete from Disk" permanently removes the VM and all its files. This action cannot be undone. Always verify the VM before deleting.</div>
+  </div>
+
+  <!-- SCREENSHOT: VMware VM table -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ VMware — Virtual Machine Management</div>
+    </div>
+    <div class="screen-inner" style="padding:0">
+      <div style="padding:10px 14px;border-bottom:1px solid #1e293b;background:#0a1020;display:flex;align-items:center;gap:10px">
+        <input style="background:#0d1829;border:1px solid #1e293b;border-radius:5px;padding:4px 10px;font-size:10px;color:#94a3b8;width:200px" placeholder="🔍  Search VMs, IP, OS…" readonly/>
+        <select style="background:#0d1829;border:1px solid #1e293b;border-radius:5px;padding:4px 8px;font-size:10px;color:#94a3b8"><option>All States</option></select>
+        <select style="background:#0d1829;border:1px solid #1e293b;border-radius:5px;padding:4px 8px;font-size:10px;color:#94a3b8"><option>All Hosts</option></select>
+        <div style="margin-left:auto;background:linear-gradient(135deg,#3b82f6,#06b6d4);border-radius:5px;padding:4px 10px;font-size:10px;color:#fff;font-weight:700">+ New VM Request</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="mock-table" style="width:100%">
+          <thead>
+            <tr>
+              <th><input type="checkbox" style="width:11px;height:11px"/></th>
+              <th>VM NAME</th><th>STATUS</th><th>IP ADDRESS</th><th>OS</th><th>CPU / RAM</th><th>HOST</th><th>SNAPSHOTS</th><th>UPTIME</th><th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><input type="checkbox" style="width:11px;height:11px"/></td>
+              <td style="color:#e2e8f0;font-weight:600">prod-web-01</td>
+              <td><span class="mock-status" style="background:#10b98118;color:#10b981;border:1px solid #10b98130">● Running</span></td>
+              <td>10.10.1.45</td><td>RHEL 9.2</td><td>4 vCPU / 8 GB</td><td>esxi-host-01</td>
+              <td><span style="background:#f59e0b18;color:#f59e0b;padding:1px 6px;border-radius:3px;font-size:8px">📸 3</span></td>
+              <td>14d 3h</td>
+              <td><span class="mock-action-btn">⚡</span><span class="mock-action-btn">📸</span><span class="mock-action-btn">🖨️</span><span class="mock-action-btn">✈️</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" style="width:11px;height:11px"/></td>
+              <td style="color:#e2e8f0;font-weight:600">prod-db-01</td>
+              <td><span class="mock-status" style="background:#10b98118;color:#10b981;border:1px solid #10b98130">● Running</span></td>
+              <td>10.10.1.46</td><td>RHEL 8.7</td><td>8 vCPU / 32 GB</td><td>esxi-host-02</td>
+              <td><span style="background:#47556920;color:#475569;padding:1px 6px;border-radius:3px;font-size:8px">📸 0</span></td>
+              <td>30d 12h</td>
+              <td><span class="mock-action-btn">⚡</span><span class="mock-action-btn">📸</span><span class="mock-action-btn">🖨️</span><span class="mock-action-btn">✈️</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" style="width:11px;height:11px"/></td>
+              <td style="color:#e2e8f0;font-weight:600">dev-app-03</td>
+              <td><span class="mock-status" style="background:#47556918;color:#94a3b8;border:1px solid #47556930">⏹ Stopped</span></td>
+              <td style="color:#475569">—</td><td>Windows 2022</td><td>4 vCPU / 16 GB</td><td>esxi-host-01</td>
+              <td><span style="background:#ef444418;color:#ef4444;padding:1px 6px;border-radius:3px;font-size:8px">📸 7</span></td>
+              <td style="color:#475569">—</td>
+              <td><span class="mock-action-btn" style="background:#10b98115;border-color:#10b98130;color:#10b981">▶</span><span class="mock-action-btn">📸</span><span class="mock-action-btn">🖨️</span><span class="mock-action-btn">✈️</span></td>
+            </tr>
+            <tr>
+              <td><input type="checkbox" style="width:11px;height:11px"/></td>
+              <td style="color:#e2e8f0;font-weight:600">test-jenkins-01</td>
+              <td><span class="mock-status" style="background:#10b98118;color:#10b981;border:1px solid #10b98130">● Running</span></td>
+              <td>10.10.2.11</td><td>Ubuntu 22.04</td><td>2 vCPU / 4 GB</td><td>esxi-host-03</td>
+              <td><span style="background:#47556920;color:#475569;padding:1px 6px;border-radius:3px;font-size:8px">📸 1</span></td>
+              <td>7d 4h</td>
+              <td><span class="mock-action-btn">⚡</span><span class="mock-action-btn">📸</span><span class="mock-action-btn">🖨️</span><span class="mock-action-btn">✈️</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:6px 14px;border-top:1px solid #1e293b;background:#0a1020;font-size:9px;color:#475569;display:flex;justify-content:space-between">
+        <span>Showing 4 of 189 VMs — 3 running · 1 stopped</span>
+        <span>← 1 2 3 … 19 →</span>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 4 — VMware module: VM list table with power status, search/filter toolbar, snapshot badges, and action buttons</div>
+  </div>
+</div>
+
+<!-- ═══════════ 07 SNAPSHOTS ═══════════ -->
+<div class="section" id="snapshots">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#f59e0b,#f97316)">📸</div>
+    <div>
+      <div class="section-title">7. Snapshot Management</div>
+      <div class="section-desc">Nested under VMware — manage VM snapshots</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    The <strong>Snapshots</strong> page (nested under VMware in the sidebar) provides a centralized view of all VM snapshots across all managed vCenters.<br/><br/>
+    <strong>Columns:</strong> VM Name · Snapshot Name · Creation Date · Age (days) · Size (if available) · vCenter<br/><br/>
+    <strong>Actions available (Admin &amp; Operator):</strong>
+    <ul style="margin:10px 0 0 18px;line-height:2">
+      <li>Delete individual snapshot from the snapshot row</li>
+      <li>Bulk-select and delete multiple snapshots at once</li>
+      <li>Create a new snapshot from any VM on the VMware page</li>
+    </ul>
+  </div></div>
+  <div class="callout callout-info">
+    <div class="callout-icon">ℹ️</div>
+    <div class="callout-text"><strong>Best Practice:</strong> Aged snapshots (&gt;7 days) consume significant datastore space and degrade VM performance. Review and clean up snapshots regularly.</div>
+  </div>
+
+  <!-- SCREENSHOT: Snapshots page -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ VMware › Snapshots</div>
+    </div>
+    <div class="screen-inner" style="padding:0">
+      <div class="mock-snap-toolbar">
+        <input class="mock-snap-search" placeholder="🔍  Search VM or snapshot…" readonly/>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <span style="background:#3b82f618;border:1px solid #3b82f630;border-radius:4px;padding:3px 7px;font-size:9px;color:#3b82f6">0 selected</span>
+          <span class="mock-snap-btn">🗑️ Delete Selected</span>
+        </div>
+      </div>
+      <table class="mock-table" style="width:100%">
+        <thead>
+          <tr><th><input type="checkbox" style="width:11px;height:11px"/></th><th>VM NAME</th><th>SNAPSHOT NAME</th><th>CREATED</th><th>AGE</th><th>VCENTER</th><th>ACTION</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><input type="checkbox" style="width:11px;height:11px"/></td><td style="color:#e2e8f0;font-weight:600">dev-app-03</td><td>pre-upgrade-2026-01</td><td>2026-01-10</td><td><span class="mock-age-badge" style="background:#ef444418;color:#ef4444;border:1px solid #ef444430">63 days</span></td><td>vc-prod-01</td><td><span class="mock-snap-btn" style="cursor:pointer">🗑️</span></td></tr>
+          <tr><td><input type="checkbox" style="width:11px;height:11px"/></td><td style="color:#e2e8f0;font-weight:600">dev-app-03</td><td>before-patch</td><td>2026-02-14</td><td><span class="mock-age-badge" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b30">28 days</span></td><td>vc-prod-01</td><td><span class="mock-snap-btn" style="cursor:pointer">🗑️</span></td></tr>
+          <tr><td><input type="checkbox" style="width:11px;height:11px"/></td><td style="color:#e2e8f0;font-weight:600">prod-web-01</td><td>snap-2026-03-01</td><td>2026-03-01</td><td><span class="mock-age-badge" style="background:#f59e0b18;color:#f59e0b;border:1px solid #f59e0b30">13 days</span></td><td>vc-prod-01</td><td><span class="mock-snap-btn" style="cursor:pointer">🗑️</span></td></tr>
+          <tr><td><input type="checkbox" style="width:11px;height:11px"/></td><td style="color:#e2e8f0;font-weight:600">prod-web-01</td><td>pre-deploy-v2.1</td><td>2026-03-10</td><td><span class="mock-age-badge" style="background:#10b98118;color:#10b981;border:1px solid #10b98130">4 days</span></td><td>vc-prod-01</td><td><span class="mock-snap-btn" style="cursor:pointer">🗑️</span></td></tr>
+          <tr><td><input type="checkbox" style="width:11px;height:11px"/></td><td style="color:#e2e8f0;font-weight:600">test-jenkins-01</td><td>clean-baseline</td><td>2026-03-07</td><td><span class="mock-age-badge" style="background:#10b98118;color:#10b981;border:1px solid #10b98130">7 days</span></td><td>vc-dev-01</td><td><span class="mock-snap-btn" style="cursor:pointer">🗑️</span></td></tr>
+        </tbody>
+      </table>
+      <div style="padding:6px 14px;border-top:1px solid #1e293b;background:#0a1020;font-size:9px;color:#475569;display:flex;justify-content:space-between">
+        <span>5 snapshots total — 📸 2 aged &gt;28 days · 📸 1 aged &gt;7 days</span>
+        <span style="color:#ef4444;font-weight:600">⚠️ 2 snapshots require cleanup</span>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 5 — Snapshots page: centralized view of all VM snapshots with age indicators (red = >28 days, yellow = >7 days)</div>
+  </div>
+</div>
+
+<!-- ═══════════ 08 OPENSHIFT ═══════════ -->
+<div class="section" id="openshift">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)">🔴</div>
+    <div>
+      <div class="section-title">8. Red Hat OpenShift Module</div>
+      <div class="section-desc">Container platform monitoring and management</div>
+    </div>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon">🌐</div>
+      <div class="feat-title">Cluster Health</div>
+      <div class="feat-desc">Overall cluster status, API endpoint health, and version information for each OCP cluster.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🖥️</div>
+      <div class="feat-title">Node Status</div>
+      <div class="feat-desc">Master/Worker/Infra node counts with Ready/NotReady breakdown and role labels.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📦</div>
+      <div class="feat-title">Pod Overview</div>
+      <div class="feat-desc">Running, Pending, Failed pod counts. Drill into namespaces for troubleshooting.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">⚙️</div>
+      <div class="feat-title">Operators</div>
+      <div class="feat-desc">Cluster Operator status — Available, Degraded, Progressing counts with degraded highlighting.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📊</div>
+      <div class="feat-title">Resource Usage</div>
+      <div class="feat-desc">CPU/Memory utilisation gauges per cluster using Prometheus metrics.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔔</div>
+      <div class="feat-title">Alerts</div>
+      <div class="feat-desc">Firing alerts from OpenShift Alertmanager surfaced directly in the portal.</div>
+    </div>
+  </div>
+
+  <!-- SCREENSHOT: OpenShift clusters -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ Red Hat OpenShift — Cluster Overview</div>
+    </div>
+    <div class="screen-inner" style="padding:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <!-- Cluster card -->
+        <div style="background:#0d1829;border:1px solid #ef444430;border-radius:10px;overflow:hidden">
+          <div style="padding:10px 14px;background:linear-gradient(135deg,#ef444410,#0d1829);border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b98160"></div>
+            <span style="font-size:11px;font-weight:800;color:#f87171">ocp-prod-cluster</span>
+            <span style="margin-left:auto;font-size:9px;color:#475569">v4.14.12</span>
+          </div>
+          <div style="padding:10px 14px">
+            <div class="mock-ocp-grid" style="grid-template-columns:repeat(3,1fr);gap:6px;padding:0 0 8px">
+              <div style="background:#060d18;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center">
+                <div style="font-size:15px;font-weight:900;color:#10b981;font-family:monospace">9/9</div>
+                <div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Nodes</div>
+                <div style="font-size:8px;color:#475569">9 ready</div>
+              </div>
+              <div style="background:#060d18;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center">
+                <div style="font-size:15px;font-weight:900;color:#06b6d4;font-family:monospace">312</div>
+                <div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Pods</div>
+                <div style="font-size:8px;color:#475569">running</div>
+              </div>
+              <div style="background:#060d18;border:1px solid #1e293b;border-radius:6px;padding:8px;text-align:center">
+                <div style="font-size:15px;font-weight:900;color:#10b981;font-family:monospace">32/32</div>
+                <div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Operators</div>
+                <div style="font-size:8px;color:#475569">available</div>
+              </div>
+            </div>
+            <div style="margin-top:6px">
+              <div class="mock-bar-row"><span class="mock-bar-label">CPU</span><div class="mock-bar-track"><div class="mock-bar-fill" style="width:58%;background:#3b82f6"></div></div><span style="font-size:8px;color:#3b82f6;min-width:28px;text-align:right">58%</span></div>
+              <div class="mock-bar-row"><span class="mock-bar-label">RAM</span><div class="mock-bar-track"><div class="mock-bar-fill" style="width:71%;background:#f59e0b"></div></div><span style="font-size:8px;color:#f59e0b;min-width:28px;text-align:right">71%</span></div>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">
+              <span style="background:#10b98118;color:#10b981;border:1px solid #10b98130;border-radius:3px;font-size:8px;padding:1px 5px;font-weight:700">3 Master</span>
+              <span style="background:#3b82f618;color:#3b82f6;border:1px solid #3b82f630;border-radius:3px;font-size:8px;padding:1px 5px;font-weight:700">4 Worker</span>
+              <span style="background:#8b5cf618;color:#8b5cf6;border:1px solid #8b5cf630;border-radius:3px;font-size:8px;padding:1px 5px;font-weight:700">2 Infra</span>
+              <span style="background:#10b98118;color:#10b981;border:1px solid #10b98130;border-radius:3px;font-size:8px;padding:1px 5px;font-weight:700">✅ Healthy</span>
+            </div>
+          </div>
+        </div>
+        <!-- Operators panel -->
+        <div style="background:#0d1829;border:1px solid #1e293b;border-radius:10px;overflow:hidden">
+          <div style="padding:10px 14px;border-bottom:1px solid #1e293b">
+            <span style="font-size:11px;font-weight:800;color:#e2e8f0">Cluster Operators</span>
+          </div>
+          <div style="padding:8px 10px">
+            <table class="mock-table" style="width:100%">
+              <thead><tr><th>OPERATOR</th><th>STATUS</th><th>VERSION</th></tr></thead>
+              <tbody>
+                <tr><td>authentication</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+                <tr><td>dns</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+                <tr><td>etcd</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+                <tr><td>ingress</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+                <tr><td>monitoring</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+                <tr><td>network</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Available</span></td><td>4.14.12</td></tr>
+              </tbody>
+            </table>
+            <div style="padding:4px 0;font-size:9px;color:#10b981;font-weight:700;text-align:center">32 of 32 operators available ✅</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 6 — OpenShift module: cluster overview card with node/pod/operator counts, utilisation bars, and node role badges</div>
+  </div>
+</div>
+
+<!-- ═══════════ 09 NUTANIX ═══════════ -->
+<div class="section" id="nutanix">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#22c55e,#16a34a)">🟦</div>
+    <div>
+      <div class="section-title">9. Nutanix AHV Module</div>
+      <div class="section-desc">Nutanix Prism Central integration</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    The Nutanix module connects to one or more <strong>Prism Central</strong> instances and provides:<br/><br/>
+    • <strong>Cluster Overview</strong> — Host count, VM count, Storage capacity, AOS version<br/>
+    • <strong>VM Status</strong> — Running/stopped VM breakdown with resource allocation<br/>
+    • <strong>Storage</strong> — Storage pool usage, container free space<br/>
+    • <strong>Alerts</strong> — Critical/Warning/Info alerts from Prism Central surfaced in the portal<br/>
+    • <strong>Hardware Health</strong> — Node/disk/NIC health status from Foundation
+  </div></div>
+
+  <!-- SCREENSHOT: Nutanix -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ Nutanix — Prism Central Overview</div>
+    </div>
+    <div class="screen-inner" style="padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+        <div style="background:#0d1829;border:1px solid #22c55e30;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">🟩</div><div style="font-size:18px;font-weight:900;color:#22c55e;font-family:monospace">1</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Prism Central</div></div>
+        <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">🖥️</div><div style="font-size:18px;font-weight:900;color:#10b981;font-family:monospace">6</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">AHV Hosts</div></div>
+        <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">💻</div><div style="font-size:18px;font-weight:900;color:#3b82f6;font-family:monospace">48</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">VMs</div><div style="font-size:8px;color:#475569">38 running</div></div>
+        <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;padding:10px;text-align:center"><div style="font-size:9px;margin-bottom:3px">💾</div><div style="font-size:18px;font-weight:900;color:#10b981;font-family:monospace">68%</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Storage Free</div><div style="font-size:8px;color:#475569">2.1 TB free</div></div>
+      </div>
+      <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;padding:12px">
+        <div style="font-size:10px;font-weight:800;color:#e2e8f0;margin-bottom:8px">Cluster: nutanix-prod-01  <span style="font-size:9px;color:#22c55e;font-weight:600;margin-left:6px">● Healthy</span>  <span style="font-size:9px;color:#475569;margin-left:6px">AOS 6.7.1</span></div>
+        <div class="mock-bar-row"><span class="mock-bar-label" style="min-width:40px">⚡ CPU</span><div class="mock-bar-track"><div class="mock-bar-fill" style="width:44%;background:#22c55e"></div></div><span style="font-size:8px;color:#22c55e;min-width:32px;text-align:right">44%</span><span style="font-size:8px;color:#475569;min-width:40px;text-align:right">26.4 GHz</span></div>
+        <div class="mock-bar-row"><span class="mock-bar-label" style="min-width:40px">🧠 RAM</span><div class="mock-bar-track"><div class="mock-bar-fill" style="width:61%;background:#f59e0b"></div></div><span style="font-size:8px;color:#f59e0b;min-width:32px;text-align:right">61%</span><span style="font-size:8px;color:#475569;min-width:40px;text-align:right">24 / 384 GB</span></div>
+        <div class="mock-bar-row"><span class="mock-bar-label" style="min-width:40px">💾 Disk</span><div class="mock-bar-track"><div class="mock-bar-fill" style="width:32%;background:#10b981"></div></div><span style="font-size:8px;color:#10b981;min-width:32px;text-align:right">32%</span><span style="font-size:8px;color:#475569;min-width:40px;text-align:right">2.1 / 6.4 TB</span></div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <div style="background:#060d18;border:1px solid #1e293b;border-radius:5px;padding:5px 8px;flex:1;text-align:center"><div style="font-size:10px;font-weight:700;color:#10b981">0</div><div style="font-size:8px;color:#475569">Critical Alerts</div></div>
+          <div style="background:#060d18;border:1px solid #1e293b;border-radius:5px;padding:5px 8px;flex:1;text-align:center"><div style="font-size:10px;font-weight:700;color:#f59e0b">2</div><div style="font-size:8px;color:#475569">Warnings</div></div>
+          <div style="background:#060d18;border:1px solid #1e293b;border-radius:5px;padding:5px 8px;flex:1;text-align:center"><div style="font-size:10px;font-weight:700;color:#3b82f6">3</div><div style="font-size:8px;color:#475569">Info</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 7 — Nutanix module: Prism Central overview with AHV host/VM counts, resource utilisation bars, and cluster alerts summary</div>
+  </div>
+</div>
+
+<!-- ═══════════ 10 ANSIBLE ═══════════ -->
+<div class="section" id="ansible">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#f97316,#ea580c)">🎛️</div>
+    <div>
+      <div class="section-title">10. Ansible AAP Module</div>
+      <div class="section-desc">Ansible Automation Platform integration</div>
+    </div>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon">📋</div>
+      <div class="feat-title">Job Templates</div>
+      <div class="feat-desc">Browse all job templates defined in AAP. Launch templates directly from the portal.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🏃</div>
+      <div class="feat-title">Job History</div>
+      <div class="feat-desc">View recent job runs with status (Successful/Failed/Running), duration, and launched-by user.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📦</div>
+      <div class="feat-title">Inventory</div>
+      <div class="feat-desc">Host inventory groups, host counts, and inventory source sync status.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📊</div>
+      <div class="feat-title">Dashboard Stats</div>
+      <div class="feat-desc">Total hosts, recent job success rate, currently running jobs, and organisation summary.</div>
+    </div>
+  </div>
+
+  <!-- SCREENSHOT: Ansible -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ Ansible AAP — Job Templates &amp; History</div>
+    </div>
+    <div class="screen-inner" style="padding:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+        <div style="background:#0d1829;border:1px solid #f9731630;border-radius:8px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:900;color:#f97316;font-family:monospace">248</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Total Hosts</div></div>
+        <div style="background:#0d1829;border:1px solid #10b98130;border-radius:8px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:900;color:#10b981;font-family:monospace">94%</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Job Success Rate</div></div>
+        <div style="background:#0d1829;border:1px solid #3b82f630;border-radius:8px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:900;color:#3b82f6;font-family:monospace">12</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Templates</div></div>
+        <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;padding:8px;text-align:center"><div style="font-size:16px;font-weight:900;color:#8b5cf6;font-family:monospace">2</div><div style="font-size:8px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Running Now</div></div>
+      </div>
+      <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;overflow:hidden">
+        <div style="padding:7px 12px;border-bottom:1px solid #1e293b;font-size:10px;font-weight:800;color:#e2e8f0">Recent Job Runs</div>
+        <table class="mock-table" style="width:100%">
+          <thead><tr><th>TEMPLATE</th><th>STATUS</th><th>LAUNCHED BY</th><th>STARTED</th><th>DURATION</th></tr></thead>
+          <tbody>
+            <tr><td style="color:#e2e8f0">VM-Patch-RHEL9</td><td><span style="background:#10b98118;color:#10b981;border:1px solid #10b98130;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700">✅ Successful</span></td><td>admin</td><td>2026-03-14 08:22</td><td>4m 12s</td></tr>
+            <tr><td style="color:#e2e8f0">Deploy-App-v2.1</td><td><span style="background:#8b5cf618;color:#8b5cf6;border:1px solid #8b5cf630;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700">⚙️ Running</span></td><td>sekhar.p</td><td>2026-03-14 09:01</td><td>3m 40s…</td></tr>
+            <tr><td style="color:#e2e8f0">Backup-VMs-All</td><td><span style="background:#10b98118;color:#10b981;border:1px solid #10b98130;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700">✅ Successful</span></td><td>system</td><td>2026-03-14 02:00</td><td>18m 05s</td></tr>
+            <tr><td style="color:#e2e8f0">Network-Audit-Scan</td><td><span style="background:#ef444418;color:#ef4444;border:1px solid #ef444430;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700">❌ Failed</span></td><td>ops-team</td><td>2026-03-13 16:45</td><td>1m 22s</td></tr>
+            <tr><td style="color:#e2e8f0">VM-Inventory-Sync</td><td><span style="background:#10b98118;color:#10b981;border:1px solid #10b98130;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700">✅ Successful</span></td><td>system</td><td>2026-03-13 14:00</td><td>2m 56s</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 9 — Ansible AAP module: dashboard stats, recent job history with status indicators (Successful / Running / Failed)</div>
+  </div>
+</div>
+
+<!-- ═══════════ 11 CAPACITY ═══════════ -->
+<div class="section" id="capacity">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#06b6d4,#0891b2)">🗄️</div>
+    <div>
+      <div class="section-title">11. Capacity Planning</div>
+      <div class="section-desc">Resource utilisation monitoring and forecasting</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    The Capacity page provides detailed CPU, RAM, and Storage utilisation data for each vCenter:
+    <ul style="margin:10px 0 0 18px;line-height:2">
+      <li><strong>Utilisation Gauges</strong> — animated arc gauges showing used%, with color thresholds (green &lt;60%, yellow 60–80%, red &gt;80%)</li>
+      <li><strong>ESXi Host Table</strong> — per-host CPU/RAM free, VM count, and power state</li>
+      <li><strong>Datastore Table</strong> — datastore name, type, capacity, free space, and usage bar</li>
+      <li><strong>Trend Charts</strong> — 7/14/30-day historical trend lines for CPU and RAM utilisation</li>
+    </ul>
+  </div></div>
+  <div class="callout callout-warn">
+    <div class="callout-icon">⚠️</div>
+    <div class="callout-text"><strong>Action Required threshold:</strong> When any resource exceeds <strong>80% utilisation</strong>, the gauge turns red and a warning banner appears. Notify your infrastructure team when this occurs.</div>
+  </div>
+
+  <!-- SCREENSHOT: Capacity gauges -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar">
+      <div class="screen-dots"><div class="screen-dot" style="background:#ef4444"></div><div class="screen-dot" style="background:#f59e0b"></div><div class="screen-dot" style="background:#10b981"></div></div>
+      <div class="screen-url">⚡ Capacity Planning — vc-prod-01</div>
+    </div>
+    <div class="screen-inner" style="padding:14px">
+      <!-- Gauge row -->
+      <div class="mock-gauge-wrap">
+        <div class="mock-gauge">
+          <svg viewBox="0 0 100 60" style="width:80px;height:50px;display:block;margin:0 auto">
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#1e293b" stroke-width="8" fill="none"/>
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#3b82f6" stroke-width="8" fill="none" stroke-dasharray="125.6" stroke-dashoffset="50" stroke-linecap="round"/>
+            <text x="50" y="48" text-anchor="middle" font-size="14" font-weight="900" fill="#3b82f6" font-family="monospace">58%</text>
+          </svg>
+          <div class="mock-gauge-label">⚡ CPU</div>
+          <div style="font-size:8px;color:#475569;margin-top:2px">34 GHz free / 80 GHz total</div>
+        </div>
+        <div class="mock-gauge">
+          <svg viewBox="0 0 100 60" style="width:80px;height:50px;display:block;margin:0 auto">
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#1e293b" stroke-width="8" fill="none"/>
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#f59e0b" stroke-width="8" fill="none" stroke-dasharray="125.6" stroke-dashoffset="35" stroke-linecap="round"/>
+            <text x="50" y="48" text-anchor="middle" font-size="14" font-weight="900" fill="#f59e0b" font-family="monospace">72%</text>
+          </svg>
+          <div class="mock-gauge-label">🧠 RAM</div>
+          <div style="font-size:8px;color:#475569;margin-top:2px">5.5 GB free / 19.6 GB total</div>
+        </div>
+        <div class="mock-gauge">
+          <svg viewBox="0 0 100 60" style="width:80px;height:50px;display:block;margin:0 auto">
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#1e293b" stroke-width="8" fill="none"/>
+            <path d="M10,50 A40,40 0 0,1 90,50" stroke="#10b981" stroke-width="8" fill="none" stroke-dasharray="125.6" stroke-dashoffset="78" stroke-linecap="round"/>
+            <text x="50" y="48" text-anchor="middle" font-size="14" font-weight="900" fill="#10b981" font-family="monospace">38%</text>
+          </svg>
+          <div class="mock-gauge-label">💾 Storage</div>
+          <div style="font-size:8px;color:#475569;margin-top:2px">186 GB free / 300 GB total</div>
+        </div>
+      </div>
+      <!-- Host table snippet -->
+      <div style="background:#0d1829;border:1px solid #1e293b;border-radius:8px;overflow:hidden;margin-top:6px">
+        <div style="padding:7px 12px;border-bottom:1px solid #1e293b;font-size:10px;font-weight:800;color:#e2e8f0">ESXi Hosts</div>
+        <table class="mock-table" style="width:100%">
+          <thead><tr><th>HOST</th><th>CPU FREE</th><th>RAM FREE</th><th>VMs</th><th>STATUS</th></tr></thead>
+          <tbody>
+            <tr><td style="color:#e2e8f0">esxi-host-01.prod</td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:55%;background:#3b82f6"></div></div> <span style="color:#3b82f6">45%</span></td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:72%;background:#f59e0b"></div></div> <span style="color:#f59e0b">28%</span></td><td>32</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Connected</span></td></tr>
+            <tr><td style="color:#e2e8f0">esxi-host-02.prod</td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:40%;background:#10b981"></div></div> <span style="color:#10b981">60%</span></td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:55%;background:#3b82f6"></div></div> <span style="color:#3b82f6">45%</span></td><td>28</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Connected</span></td></tr>
+            <tr><td style="color:#e2e8f0">esxi-host-03.prod</td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:83%;background:#ef4444"></div></div> <span style="color:#ef4444">17%</span></td><td><div class="mock-bar-track" style="width:80px;display:inline-block"><div class="mock-bar-fill" style="width:88%;background:#ef4444"></div></div> <span style="color:#ef4444">12%</span></td><td>41</td><td><span style="color:#10b981;font-size:8px;font-weight:700">✅ Connected</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 8 — Capacity page: resource utilisation arc gauges (green &lt;60%, yellow 60–80%, red &gt;80%) and ESXi host table with per-host CPU/RAM bars</div>
+  </div>
+</div>
+
+<!-- ═══════════ 12 PROJECT UTILIZATION ═══════════ -->
+<div class="section" id="utilization">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)">🏷️</div>
+    <div>
+      <div class="section-title">12. Project Utilization</div>
+      <div class="section-desc">Per-project resource allocation reporting</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    Displays resource consumption broken down by project (cost center / tag). Each project row shows:<br/><br/>
+    • VM count · vCPU allocated · RAM (GB) allocated · Storage (GB) consumed<br/>
+    • Running vs stopped VM ratio<br/>
+    • Visual bar showing project's share of total environment resources<br/><br/>
+    Use this page to identify over-allocated or under-utilised projects for capacity reclamation.
+  </div></div>
+
+  <!-- Fig 10: Project Utilization -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar"><span class="screen-dots"><span></span><span></span><span></span></span><span class="screen-url">LaaS Portal — Project Utilization</span></div>
+    <div style="background:#0d1829;padding:18px 20px;font-family:monospace">
+      <!-- Toolbar -->
+      <div class="mock-snap-toolbar" style="margin-bottom:14px">
+        <span style="color:#94a3b8;font-size:12px">🏷️ Project Utilization Report</span>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <span style="background:#1e293b;color:#94a3b8;border:1px solid #334155;padding:4px 10px;border-radius:4px;font-size:11px">📅 March 2026</span>
+          <span style="background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640;padding:4px 10px;border-radius:4px;font-size:11px">⬇ Export CSV</span>
+        </div>
+      </div>
+      <!-- Summary KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;text-align:center">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">TOTAL PROJECTS</div>
+          <div style="color:#f1f5f9;font-size:20px;font-weight:700">12</div>
+        </div>
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;text-align:center">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">TOTAL VMs</div>
+          <div style="color:#3b82f6;font-size:20px;font-weight:700">248</div>
+        </div>
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;text-align:center">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">vCPU ALLOCATED</div>
+          <div style="color:#8b5cf6;font-size:20px;font-weight:700">1,984</div>
+        </div>
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;text-align:center">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:4px">RAM ALLOCATED</div>
+          <div style="color:#06b6d4;font-size:20px;font-weight:700">7.8 TB</div>
+        </div>
+      </div>
+      <!-- Project table -->
+      <div class="mock-table">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#1e293b;color:#94a3b8">
+            <th style="padding:8px 10px;text-align:left">PROJECT / COST CENTER</th>
+            <th style="padding:8px;text-align:center">VMs</th>
+            <th style="padding:8px;text-align:center">vCPU</th>
+            <th style="padding:8px;text-align:center">RAM (GB)</th>
+            <th style="padding:8px;text-align:center">STORAGE (GB)</th>
+            <th style="padding:8px;text-align:left;min-width:140px">RESOURCE SHARE</th>
+            <th style="padding:8px;text-align:center">STATUS</th>
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #1e293b">
+              <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-PROD-INFRA</td>
+              <td style="padding:8px;text-align:center;color:#3b82f6">74</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">592</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">2,368</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">14,200</td>
+              <td style="padding:8px">
+                <div style="background:#1e293b;border-radius:3px;height:8px;overflow:hidden">
+                  <div style="background:linear-gradient(90deg,#3b82f6,#8b5cf6);width:72%;height:100%;border-radius:3px"></div>
+                </div>
+                <div style="color:#94a3b8;font-size:10px;margin-top:3px">72%</div>
+              </td>
+              <td style="padding:8px;text-align:center"><span style="background:#10b98120;color:#10b981;padding:2px 8px;border-radius:4px;font-size:10px">Active</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e293b">
+              <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-DEV-LAB</td>
+              <td style="padding:8px;text-align:center;color:#3b82f6">52</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">416</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">1,664</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">8,450</td>
+              <td style="padding:8px">
+                <div style="background:#1e293b;border-radius:3px;height:8px;overflow:hidden">
+                  <div style="background:linear-gradient(90deg,#3b82f6,#06b6d4);width:51%;height:100%;border-radius:3px"></div>
+                </div>
+                <div style="color:#94a3b8;font-size:10px;margin-top:3px">51%</div>
+              </td>
+              <td style="padding:8px;text-align:center"><span style="background:#10b98120;color:#10b981;padding:2px 8px;border-radius:4px;font-size:10px">Active</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e293b">
+              <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-BACKUP-DR</td>
+              <td style="padding:8px;text-align:center;color:#3b82f6">38</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">304</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">1,216</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">22,800</td>
+              <td style="padding:8px">
+                <div style="background:#1e293b;border-radius:3px;height:8px;overflow:hidden">
+                  <div style="background:linear-gradient(90deg,#f59e0b,#ef4444);width:38%;height:100%;border-radius:3px"></div>
+                </div>
+                <div style="color:#94a3b8;font-size:10px;margin-top:3px">38%</div>
+              </td>
+              <td style="padding:8px;text-align:center"><span style="background:#10b98120;color:#10b981;padding:2px 8px;border-radius:4px;font-size:10px">Active</span></td>
+            </tr>
+            <tr style="border-bottom:1px solid #1e293b">
+              <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-QA-STAGING</td>
+              <td style="padding:8px;text-align:center;color:#3b82f6">29</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">232</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">928</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">5,100</td>
+              <td style="padding:8px">
+                <div style="background:#1e293b;border-radius:3px;height:8px;overflow:hidden">
+                  <div style="background:linear-gradient(90deg,#10b981,#3b82f6);width:29%;height:100%;border-radius:3px"></div>
+                </div>
+                <div style="color:#94a3b8;font-size:10px;margin-top:3px">29%</div>
+              </td>
+              <td style="padding:8px;text-align:center"><span style="background:#f59e0b20;color:#f59e0b;padding:2px 8px;border-radius:4px;font-size:10px">Review</span></td>
+            </tr>
+            <tr>
+              <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-DECOM-LEGACY</td>
+              <td style="padding:8px;text-align:center;color:#3b82f6">15</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">60</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">240</td>
+              <td style="padding:8px;text-align:center;color:#f1f5f9">1,800</td>
+              <td style="padding:8px">
+                <div style="background:#1e293b;border-radius:3px;height:8px;overflow:hidden">
+                  <div style="background:#334155;width:12%;height:100%;border-radius:3px"></div>
+                </div>
+                <div style="color:#94a3b8;font-size:10px;margin-top:3px">12%</div>
+              </td>
+              <td style="padding:8px;text-align:center"><span style="background:#ef444420;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:10px">Decom</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 10 — Project Utilization page: per-project VM count, vCPU/RAM/storage allocation, resource share progress bars, and status badges</div>
+  </div>
+
+</div>
+
+<!-- ═══════════ 13 CHARGEBACK ═══════════ -->
+<div class="section" id="chargeback">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#10b981,#059669)">💳</div>
+    <div>
+      <div class="section-title">13. Chargeback</div>
+      <div class="section-desc">Cost allocation and billing reports</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    The Chargeback module calculates monthly infrastructure costs per project based on allocated resource rates:<br/><br/>
+    <strong>Rate Card (default):</strong>
+    <table class="spec-table" style="margin-top:12px">
+      <tr><td>vCPU / month</td><td>₹ 150 (or configurable)</td></tr>
+      <tr><td>RAM GB / month</td><td>₹ 80</td></tr>
+      <tr><td>Storage GB / month</td><td>₹ 5</td></tr>
+    </table>
+    <br/>
+    <strong>Features:</strong> Month selector · Project filter · Export to PDF · Export to CSV · Donut chart breakdown · Total cost summary
+  </div></div>
+
+  <!-- Fig 11: Chargeback -->
+  <div class="screenshot-wrap">
+    <div class="screen-bar"><span class="screen-dots"><span></span><span></span><span></span></span><span class="screen-url">LaaS Portal — Chargeback</span></div>
+    <div style="background:#0d1829;padding:18px 20px;font-family:monospace">
+      <!-- Toolbar -->
+      <div class="mock-snap-toolbar" style="margin-bottom:16px">
+        <span style="color:#94a3b8;font-size:12px">💳 Chargeback Report</span>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;padding:4px 10px;border-radius:4px;font-size:11px"><option>March 2026</option></select>
+          <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;padding:4px 10px;border-radius:4px;font-size:11px"><option>All Projects</option></select>
+          <span style="background:#ef444420;color:#ef4444;border:1px solid #ef444440;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer">⬇ PDF</span>
+          <span style="background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640;padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer">⬇ CSV</span>
+        </div>
+      </div>
+      <!-- Main layout: donut + table -->
+      <div style="display:grid;grid-template-columns:220px 1fr;gap:16px">
+        <!-- Donut chart mock -->
+        <div style="background:#111827;border:1px solid #1e293b;border-radius:8px;padding:16px;display:flex;flex-direction:column;align-items:center">
+          <div style="color:#94a3b8;font-size:10px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.05em">Cost Distribution</div>
+          <!-- SVG donut -->
+          <svg width="140" height="140" viewBox="0 0 140 140">
+            <circle cx="70" cy="70" r="52" fill="none" stroke="#1e293b" stroke-width="22"/>
+            <!-- SDX-PROD-INFRA 42% -->
+            <circle cx="70" cy="70" r="52" fill="none" stroke="#3b82f6" stroke-width="22"
+              stroke-dasharray="137.2 326.7" stroke-dashoffset="0" transform="rotate(-90 70 70)"/>
+            <!-- SDX-DEV-LAB 26% -->
+            <circle cx="70" cy="70" r="52" fill="none" stroke="#8b5cf6" stroke-width="22"
+              stroke-dasharray="84.9 326.7" stroke-dashoffset="-137.2" transform="rotate(-90 70 70)"/>
+            <!-- SDX-BACKUP-DR 18% -->
+            <circle cx="70" cy="70" r="52" fill="none" stroke="#06b6d4" stroke-width="22"
+              stroke-dasharray="58.8 326.7" stroke-dashoffset="-222.1" transform="rotate(-90 70 70)"/>
+            <!-- Others 14% -->
+            <circle cx="70" cy="70" r="52" fill="none" stroke="#f59e0b" stroke-width="22"
+              stroke-dasharray="45.7 326.7" stroke-dashoffset="-280.9" transform="rotate(-90 70 70)"/>
+            <text x="70" y="66" text-anchor="middle" fill="#f1f5f9" font-size="13" font-weight="700" font-family="monospace">₹ 4.82L</text>
+            <text x="70" y="80" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="monospace">Total / Month</text>
+          </svg>
+          <!-- Legend -->
+          <div style="width:100%;margin-top:12px;display:flex;flex-direction:column;gap:5px">
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#cbd5e1">
+              <span style="width:10px;height:10px;border-radius:2px;background:#3b82f6;display:inline-block"></span>PROD-INFRA <span style="margin-left:auto;color:#3b82f6">42%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#cbd5e1">
+              <span style="width:10px;height:10px;border-radius:2px;background:#8b5cf6;display:inline-block"></span>DEV-LAB <span style="margin-left:auto;color:#8b5cf6">26%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#cbd5e1">
+              <span style="width:10px;height:10px;border-radius:2px;background:#06b6d4;display:inline-block"></span>BACKUP-DR <span style="margin-left:auto;color:#06b6d4">18%</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:#cbd5e1">
+              <span style="width:10px;height:10px;border-radius:2px;background:#f59e0b;display:inline-block"></span>Others <span style="margin-left:auto;color:#f59e0b">14%</span>
+            </div>
+          </div>
+        </div>
+        <!-- Cost breakdown table -->
+        <div>
+          <div class="mock-table">
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead><tr style="background:#1e293b;color:#94a3b8">
+                <th style="padding:8px 10px;text-align:left">PROJECT</th>
+                <th style="padding:8px;text-align:center">vCPU</th>
+                <th style="padding:8px;text-align:center">RAM (GB)</th>
+                <th style="padding:8px;text-align:center">STORAGE (GB)</th>
+                <th style="padding:8px;text-align:right">CPU COST</th>
+                <th style="padding:8px;text-align:right">RAM COST</th>
+                <th style="padding:8px;text-align:right">STORAGE COST</th>
+                <th style="padding:8px;text-align:right;color:#10b981">TOTAL</th>
+              </tr></thead>
+              <tbody>
+                <tr style="border-bottom:1px solid #1e293b">
+                  <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-PROD-INFRA</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">592</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">2,368</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">14,200</td>
+                  <td style="padding:8px;text-align:right;color:#3b82f6">₹ 88,800</td>
+                  <td style="padding:8px;text-align:right;color:#8b5cf6">₹ 1,89,440</td>
+                  <td style="padding:8px;text-align:right;color:#06b6d4">₹ 71,000</td>
+                  <td style="padding:8px;text-align:right;color:#10b981;font-weight:700">₹ 3,49,240</td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e293b">
+                  <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-DEV-LAB</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">416</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">1,664</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">8,450</td>
+                  <td style="padding:8px;text-align:right;color:#3b82f6">₹ 62,400</td>
+                  <td style="padding:8px;text-align:right;color:#8b5cf6">₹ 1,33,120</td>
+                  <td style="padding:8px;text-align:right;color:#06b6d4">₹ 42,250</td>
+                  <td style="padding:8px;text-align:right;color:#10b981;font-weight:700">₹ 2,37,770</td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e293b">
+                  <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-BACKUP-DR</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">304</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">1,216</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">22,800</td>
+                  <td style="padding:8px;text-align:right;color:#3b82f6">₹ 45,600</td>
+                  <td style="padding:8px;text-align:right;color:#8b5cf6">₹ 97,280</td>
+                  <td style="padding:8px;text-align:right;color:#06b6d4">₹ 1,14,000</td>
+                  <td style="padding:8px;text-align:right;color:#10b981;font-weight:700">₹ 2,56,880</td>
+                </tr>
+                <tr style="border-bottom:1px solid #1e293b">
+                  <td style="padding:8px 10px;color:#f1f5f9;font-weight:600">🏷️ SDX-QA-STAGING</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">232</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">928</td>
+                  <td style="padding:8px;text-align:center;color:#94a3b8">5,100</td>
+                  <td style="padding:8px;text-align:right;color:#3b82f6">₹ 34,800</td>
+                  <td style="padding:8px;text-align:right;color:#8b5cf6">₹ 74,240</td>
+                  <td style="padding:8px;text-align:right;color:#06b6d4">₹ 25,500</td>
+                  <td style="padding:8px;text-align:right;color:#10b981;font-weight:700">₹ 1,34,540</td>
+                </tr>
+                <tr>
+                  <td colspan="7" style="padding:10px;text-align:right;color:#94a3b8;font-size:11px">Grand Total (March 2026)</td>
+                  <td style="padding:10px;text-align:right;color:#f1f5f9;font-size:14px;font-weight:700;background:#10b98115;border-top:2px solid #10b981">₹ 9,78,430</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Rate card footer -->
+          <div style="margin-top:10px;background:#111827;border:1px solid #1e293b;border-radius:6px;padding:10px;display:flex;gap:20px">
+            <span style="color:#94a3b8;font-size:10px">Rate Card:</span>
+            <span style="color:#3b82f6;font-size:10px">vCPU ₹150/mo</span>
+            <span style="color:#8b5cf6;font-size:10px">RAM ₹80/GB/mo</span>
+            <span style="color:#06b6d4;font-size:10px">Storage ₹5/GB/mo</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="screen-caption">Fig 11 — Chargeback module: donut chart showing cost distribution by project, itemised cost breakdown table (vCPU / RAM / Storage), grand total, and configurable rate card</div>
+  </div>
+
+</div>
+
+<!-- ═══════════ 14 NETWORKS & IPAM ═══════════ -->
+<div class="section" id="networks">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#06b6d4,#3b82f6)">🌐</div>
+    <div>
+      <div class="section-title">14. Networks &amp; IPAM</div>
+      <div class="section-desc">Network topology and IP address management</div>
+    </div>
+  </div>
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon">🌐</div>
+      <div class="feat-title">Networks Page</div>
+      <div class="feat-desc">Lists all vCenter port groups and distributed switches with VLAN IDs, connected VM counts, and switch names.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📡</div>
+      <div class="feat-title">IPAM Page</div>
+      <div class="feat-desc">Subnet overview with used/free IP counts, occupancy % bar, and IP allocation table per subnet.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔍</div>
+      <div class="feat-title">Free IP Finder</div>
+      <div class="feat-desc">Search for available IPs within a subnet. Useful before provisioning new VMs.</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📋</div>
+      <div class="feat-title">Allocation History</div>
+      <div class="feat-desc">Track when IPs were allocated, to which VM/host, and by which user.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 15 VM REQUESTS ═══════════ -->
+<div class="section" id="requests">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">📋</div>
+    <div>
+      <div class="section-title">15. VM Request Workflow</div>
+      <div class="section-desc">Self-service VM provisioning with approval</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Workflow Steps</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Requester Raises a Request</div>
+          <div class="step-body">Navigate to VM Requests → New Request. Fill in VM Name, vCPU, RAM, Storage, OS, Project/Cost Center, justification. Submit.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Admin Receives Notification</div>
+          <div class="step-body">Admin sees the pending badge counter on the VM Requests nav item. Email notification is also triggered (if configured).</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Admin Reviews &amp; Decides</div>
+          <div class="step-body">Admin opens the request, reviews justification and resource specs, then clicks Approve or Reject with optional comments.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">VM Provisioned or Rejected</div>
+          <div class="step-body">If approved, the VM is provisioned from a predefined template. If rejected, the requester sees the reason in their request history.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 16 AUDIT LOG ═══════════ -->
+<div class="section" id="audit">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#64748b,#475569)">🔍</div>
+    <div>
+      <div class="section-title">16. Audit Log</div>
+      <div class="section-desc">Compliance and traceability — every action logged</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-body">
+    Every user action performed through the portal is recorded in the Audit Log with:<br/><br/>
+    • <strong>Timestamp</strong> — Date and time (UTC) of the action<br/>
+    • <strong>User</strong> — Who performed the action<br/>
+    • <strong>Action Type</strong> — e.g. VM_POWER_ON · VM_DELETE · SNAPSHOT_CREATE · USER_LOGIN<br/>
+    • <strong>Resource</strong> — Which VM, host, or object was affected<br/>
+    • <strong>Status</strong> — Success or Failure<br/>
+    • <strong>Details</strong> — Additional context / parameters<br/><br/>
+    <strong>Filters:</strong> Date range · User · Action type · Status · Free text search<br/>
+    <strong>Export:</strong> CSV export available (Admin only)
+  </div></div>
+</div>
+
+<!-- ═══════════ 17 ROLES ═══════════ -->
+<div class="section" id="roles">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#ef4444,#8b5cf6)">👥</div>
+    <div>
+      <div class="section-title">17. User Roles &amp; Permissions</div>
+      <div class="section-desc">Role-based access control matrix</div>
+    </div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val" style="color:#ef4444">Admin</div><div class="kpi-label">Full Access</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#f97316">Operator</div><div class="kpi-label">Read + Execute</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#3b82f6">Viewer</div><div class="kpi-label">Read Only</div></div>
+    <div class="kpi"><div class="kpi-val" style="color:#10b981">Requester</div><div class="kpi-label">Request Only</div></div>
+  </div>
+  <table class="role-table">
+    <thead>
+      <tr>
+        <th>Feature / Action</th>
+        <th>Admin</th>
+        <th>Operator</th>
+        <th>Viewer</th>
+        <th>Requester</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>View Overview Dashboard</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>View VM List</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+      <tr><td>Power On/Off/Reboot VM</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Clone VM</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Migrate VM (vMotion)</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Create Snapshot</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Delete Snapshot</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Delete VM from Disk</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr>
+      <tr><td>View Capacity Reports</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+      <tr><td>View Chargeback</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+      <tr><td>View Audit Log</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Manage Users &amp; Roles</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Raise VM Request</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+      <tr><td>Approve/Reject VM Request</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td></tr>
+      <tr><td>Launch Ansible Jobs</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      <tr><td>View IPAM</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+      <tr><td>Export Reports (CSV/PDF)</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ 18 TECH SPECS ═══════════ -->
+<div class="section" id="techspecs">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#475569,#334155)">⚙️</div>
+    <div>
+      <div class="section-title">18. Technical Specifications</div>
+      <div class="section-desc">Architecture, stack, server specs, and API reference</div>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-title">🏗️ Application Architecture</div>
+    <div class="card-body">
+      LaaS Portal is a 3-tier web application:<br/><br/>
+      <strong>Frontend</strong> → React 18 SPA (Vite build) served as static files<br/>
+      <strong>Backend API</strong> → FastAPI (Python 3.11+) with SQLite database<br/>
+      <strong>Data Sources</strong> → VMware vCenter REST API · OCP API + Prometheus · Nutanix Prism Central API · Ansible AAP API · phpIPAM REST API
+    </div>
+  </div>
+
+  <div class="card"><div class="card-title">🖥️ Server Hardware Specifications</div>
+    <table class="spec-table">
+      <tr><td>CPU</td><td>Intel Xeon Gold 6130 — 2× 8-core / 16-thread = <strong>16 physical cores / 32 threads</strong></td></tr>
+      <tr><td>RAM</td><td><strong>24 GB DDR4 ECC</strong> (usable ~22 GB)</td></tr>
+      <tr><td>Storage</td><td><strong>300 GB SSD</strong> — Application, OS, database</td></tr>
+      <tr><td>Network</td><td><strong>1 Gbps</strong> NIC to corporate LAN</td></tr>
+      <tr><td>OS</td><td>Windows Server 2019 Standard</td></tr>
+      <tr><td>Expected Concurrent Users</td><td>30–60 (up to 100+ with optimisations)</td></tr>
+    </table>
+  </div>
+
+  <div class="card"><div class="card-title">🛠️ Software Stack</div>
+    <table class="spec-table">
+      <tr><td>Frontend Framework</td><td>React 18 + Vite 7</td></tr>
+      <tr><td>UI Library</td><td>Custom CSS (zero external UI framework)</td></tr>
+      <tr><td>Backend Framework</td><td>FastAPI 0.111+ (Python 3.11+)</td></tr>
+      <tr><td>ASGI Server</td><td>Uvicorn (recommended: 4–8 workers)</td></tr>
+      <tr><td>Database</td><td>SQLite 3 with WAL mode enabled</td></tr>
+      <tr><td>VMware SDK</td><td>pyVmomi (vSphere SDK for Python)</td></tr>
+      <tr><td>OCP Integration</td><td>kubernetes Python client + Prometheus HTTP API</td></tr>
+      <tr><td>Nutanix Integration</td><td>Prism Central REST API v3</td></tr>
+      <tr><td>Ansible Integration</td><td>Ansible AAP REST API v2</td></tr>
+      <tr><td>IPAM Integration</td><td>phpIPAM REST API</td></tr>
+    </table>
+  </div>
+
+  <div class="card"><div class="card-title">🔌 API Endpoints Reference</div>
+    <table class="role-table">
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/vcenters</code></td><td>List all registered vCenter instances</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/vms/{vc_id}</code></td><td>Fetch all VMs for a vCenter</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/vm/{vc_id}/{vm_name}/power</code></td><td>Power on/off/reboot a VM</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/vm/{vc_id}/{vm_name}/snapshot</code></td><td>Create a VM snapshot</td></tr>
+        <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/api/vm/{vc_id}/{vm_name}/snapshot</code></td><td>Delete a VM snapshot</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/vm/{vc_id}/{vm_name}/clone</code></td><td>Clone a VM</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/vm/{vc_id}/{vm_name}/migrate</code></td><td>vMotion a VM to another host</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/ocp/clusters</code></td><td>List all OCP clusters</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/nutanix/pcs</code></td><td>List all Nutanix Prism Centrals</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/ansible/job-templates</code></td><td>List Ansible job templates</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/ansible/launch/{template_id}</code></td><td>Launch an Ansible job template</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/requests</code></td><td>List VM provisioning requests</td></tr>
+        <tr><td><span class="badge badge-blue">POST</span></td><td><code>/api/requests/{id}/approve</code></td><td>Approve a VM request</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/audit</code></td><td>Fetch audit log entries</td></tr>
+        <tr><td><span class="badge badge-green">GET</span></td><td><code>/api/users</code></td><td>List all portal users (Admin)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card"><div class="card-title">🔒 Security Notes</div>
+    <div class="card-body">
+      • All API endpoints are protected by JWT-based session authentication<br/>
+      • Role checks are enforced server-side — UI hiding is supplementary only<br/>
+      • SQLite database is stored locally; backup regularly to a network share<br/>
+      • vCenter/OCP/Nutanix credentials are stored encrypted in the DB<br/>
+      • HTTPS (TLS) is recommended for production deployment behind a reverse proxy (nginx)
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ 19 FAQ ═══════════ -->
+<div class="section" id="faq">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#10b981,#059669)">❓</div>
+    <div>
+      <div class="section-title">19. FAQ &amp; Troubleshooting</div>
+      <div class="section-desc">Common questions and how to resolve them</div>
+    </div>
+  </div>
+  <div class="card"><div class="card-title">Q: The portal shows "0 VMs" but vCenter has VMs — why?</div>
+    <div class="card-body">Check that the vCenter is correctly registered under Settings and the credentials are valid. Try clicking Retry/Refresh on the Overview page. If the issue persists, check the backend logs for vCenter API errors.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: I cannot see the Audit Log or Users menu items</div>
+    <div class="card-body">Audit Log requires Operator or Admin role. Users &amp; Roles requires Admin role. Contact your Admin to upgrade your role if needed.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: Snapshot creation timed out — what should I do?</div>
+    <div class="card-body">Large VMs or datastores with high I/O can cause snapshot operations to time longer than the portal's timeout. Check the vCenter task list directly to see if the snapshot completed. If it failed, retry during off-peak hours.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: The OCP cluster shows "Degraded" even though the cluster seems healthy</div>
+    <div class="card-body">The portal flags Degraded if more than 25% of nodes are NotReady OR more than 15% of Cluster Operators are degraded. Check the Nodes and Operators tabs in the OpenShift module for details. Transient operator cycling (e.g. during upgrades) can trigger this briefly.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: How do I add a new vCenter / OCP cluster / Nutanix Prism Central?</div>
+    <div class="card-body">Navigate to Settings (Admin only) → Add vCenter / Add OCP Cluster / Add Nutanix PC. Enter the API endpoint URL, credentials (stored encrypted), and save. The portal will begin polling the new environment immediately.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: Can I export VM lists or capacity reports?</div>
+    <div class="card-body">Yes — most tables have a CSV export button (available to Admin and Operator). Chargeback also has a PDF export. For audit log export, Admin role is required.</div>
+  </div>
+  <div class="card"><div class="card-title">Q: The analog clock in the sidebar shows the wrong time</div>
+    <div class="card-body">The clock is driven by the browser's local system clock, not the server. Ensure your workstation clock is synchronized to the corporate NTP server.</div>
+  </div>
+</div>
+
+<!-- ═══════════ 20 DOCUMENT AUTHORIZATION ═══════════ -->
+<div class="section" id="auth">
+  <div class="section-header">
+    <div class="section-icon" style="background:linear-gradient(135deg,#475569,#334155)">📄</div>
+    <div>
+      <div class="section-title">20. Document Authorization</div>
+      <div class="section-desc">Preparation and approval details</div>
+    </div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-cell">
+      <div class="auth-avatar" style="background:linear-gradient(135deg,#3b82f6,#06b6d4)">✍️</div>
+      <div>
+        <div class="auth-role">Prepared By</div>
+        <div class="auth-name">Sekhar Perumal</div>
+        <div class="auth-dept" style="color:#60a5fa">SDX Infrastructure &amp; DC Operations · Wipro</div>
+        <div style="font-size:11px;color:var(--mute);margin-top:4px">March 2026</div>
+      </div>
+    </div>
+    <div class="auth-cell">
+      <div class="auth-avatar" style="background:linear-gradient(135deg,#10b981,#22c55e)">✅</div>
+      <div>
+        <div class="auth-role">Approved By</div>
+        <div class="auth-name">Khalid Khan</div>
+        <div class="auth-dept" style="color:#4ade80">SDX Infrastructure &amp; DC Operations · Wipro</div>
+        <div style="font-size:11px;color:var(--mute);margin-top:4px">March 2026</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page-wrap -->
+
+<!-- FOOTER -->
+<div class="page-wrap">
+  <div class="doc-footer">
+    <div style="font-size:24px;margin-bottom:12px">⚡</div>
+    <div style="font-weight:800;font-size:16px;color:var(--text)">LaaS Portal &mdash; End User Manual v6.0</div>
+    <div style="font-size:12px;color:var(--mute);margin-top:6px">Wipro SDX Infrastructure &amp; DC Operations &nbsp;·&nbsp; March 2026</div>
+    <div style="font-size:11px;color:var(--mute);margin-top:4px">Confidential — Internal Use Only</div>
+  </div>
+</div>
+
+</body>
+</html>

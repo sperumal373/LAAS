@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LaaS Portal - Architecture Document v2.0</title>
+  <style>
+    @page {
+      margin: 20mm 15mm 22mm 15mm;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      color: #1a1a2e;
+      margin: 0;
+      padding: 24px 32px 60px 32px;
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    /* ── PRINT FOOTER ── */
+    .pdf-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 20px;
+      background: linear-gradient(90deg, #6d28d9 0%, #4338ca 100%);
+      font-size: 9px;
+      color: #fff;
+      font-weight: 600;
+    }
+    .pdf-footer .foot-left  { text-align: left }
+    .pdf-footer .foot-right { text-align: right }
+
+    /* ── ACTION BUTTONS (screen only) ── */
+    .actions {
+      display: flex; gap: 10px; margin-bottom: 20px;
+    }
+    .actions button {
+      padding: 10px 24px; border: none; border-radius: 8px;
+      cursor: pointer; font-size: 13px; font-weight: 700;
+      letter-spacing: .3px; transition: all .2s;
+    }
+    .btn-print { background: linear-gradient(135deg, #6d28d9, #4338ca); color: #fff }
+    .btn-print:hover { background: linear-gradient(135deg, #5b21b6, #3730a3) }
+    .btn-close { background: #e5e7eb; color: #1f2937 }
+    @media print { .actions { display: none !important } }
+
+    /* ── COVER HEADER ── */
+    .cover-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 4px solid #6d28d9;
+      padding-bottom: 14px;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, rgba(109,40,217,0.03) 0%, rgba(67,56,202,0.03) 100%);
+      padding: 12px 16px 14px 16px;
+      border-radius: 8px 8px 0 0;
+    }
+    .cover-logo { height: 56px }
+    .cover-right { text-align: right }
+    .cover-title {
+      font-size: 26px; font-weight: 900; color: #4c1d95;
+      letter-spacing: -.3px; margin-bottom: 3px;
+    }
+    .cover-subtitle { font-size: 13px; color: #5b21b6; font-weight: 700; margin-bottom: 3px }
+    .cover-meta { font-size: 10px; color: #64748b; font-weight: 600 }
+
+    /* ── DOCUMENT INFO BAR ── */
+    .doc-bar {
+      display: flex; gap: 0;
+      border: 2px solid #e0e7ff;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 22px;
+      margin-top: 10px;
+    }
+    .doc-bar-cell {
+      flex: 1; padding: 10px 14px;
+      border-right: 1px solid #e0e7ff;
+      background: linear-gradient(180deg, #f0f0ff 0%, #faf8ff 100%);
+    }
+    .doc-bar-cell:last-child { border-right: none }
+    .doc-bar-lbl { font-size: 9px; color: #6366f1; font-weight: 700; text-transform: uppercase; letter-spacing: .7px }
+    .doc-bar-val { font-size: 12px; font-weight: 800; color: #1e1b4b; margin-top: 2px }
+
+    /* ── SECTION HEADING ── */
+    h2 {
+      font-size: 13px; font-weight: 800; color: #fff;
+      background: linear-gradient(135deg, #6d28d9 0%, #4338ca 60%, #6366f1 100%);
+      text-transform: uppercase; letter-spacing: .8px;
+      margin: 28px 0 0 0;
+      padding: 9px 16px;
+      border-radius: 6px 6px 0 0;
+      page-break-after: avoid;
+    }
+    h2 .h2-num {
+      display: inline-block;
+      background: rgba(255,255,255,.25);
+      border-radius: 4px;
+      padding: 1px 8px;
+      margin-right: 10px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    /* ── H3 SUB-HEADINGS ── */
+    h3 {
+      font-size: 13px;
+      font-weight: 800;
+      color: #4c1d95;
+      margin: 18px 0 10px 0;
+      padding: 6px 12px;
+      background: linear-gradient(90deg, #ede9fe 0%, #f5f3ff 100%);
+      border-left: 4px solid #6d28d9;
+      border-radius: 0 6px 6px 0;
+    }
+
+    /* ── KPI TILES ── */
+    .kpi-row {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px;
+    }
+    .kpi {
+      flex: 1; min-width: 100px;
+      background: linear-gradient(180deg, #fff 0%, #f8f6ff 100%);
+      border: 2px solid #e0e7ff;
+      border-top: 4px solid #6d28d9;
+      border-radius: 0 0 8px 8px;
+      padding: 10px 10px;
+      text-align: center;
+    }
+    .kpi-val { font-size: 16px; font-weight: 900; color: #4c1d95 }
+    .kpi-lbl { font-size: 9px; color: #4338ca; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-top: 3px }
+
+    /* ── SUMMARY BOX ── */
+    .summary-box {
+      background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
+      border-left: 5px solid #6d28d9;
+      border-radius: 0 8px 8px 0;
+      padding: 16px 20px;
+      margin-bottom: 22px;
+      line-height: 1.8;
+      color: #1e1b4b;
+      font-size: 12px;
+    }
+    .summary-box .s-title {
+      font-size: 12px; font-weight: 900; color: #4c1d95;
+      text-transform: uppercase; letter-spacing: .6px;
+      margin-bottom: 8px;
+    }
+    .summary-box strong {
+      color: #4c1d95;
+      font-weight: 800;
+    }
+
+    /* ── TABLES ── */
+    .tbl-wrap {
+      border: 2px solid #e0e7ff;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      overflow: hidden;
+      margin-bottom: 22px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 11.5px }
+    th {
+      background: linear-gradient(180deg, #ede9fe 0%, #e0e7ff 100%);
+      color: #312e81;
+      padding: 8px 12px; text-align: left;
+      font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+      border-bottom: 2px solid #c7d2fe;
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #e0e7ff;
+      vertical-align: top;
+      color: #1e1b4b;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+    tr:last-child td { border-bottom: none }
+    tr:nth-child(even) td { background: #f8f7ff }
+    tr:hover td { background: #f0edff }
+
+    /* Table label cells */
+    td .lbl {
+      font-weight: 800;
+      color: #4c1d95;
+      font-size: 11.5px;
+    }
+    td strong {
+      font-weight: 800;
+      color: #312e81;
+    }
+
+    /* ── FLOW DIAGRAM ── */
+    .flow-wrap {
+      border: 2px solid #e0e7ff; border-top: none;
+      border-radius: 0 0 8px 8px;
+      padding: 20px 16px;
+      margin-bottom: 22px;
+      background: linear-gradient(135deg, #faf9ff 0%, #f0f0ff 100%);
+    }
+    .flow-row { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: nowrap }
+    .flow-box {
+      background: linear-gradient(135deg, #6d28d9, #4338ca);
+      color: #fff;
+      border-radius: 8px; padding: 10px 8px;
+      font-size: 11px; font-weight: 800;
+      text-align: center; min-width: 85px;
+      line-height: 1.45;
+      box-shadow: 0 2px 6px rgba(109,40,217,0.15);
+    }
+    .flow-box.light {
+      background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+      color: #312e81;
+    }
+    .flow-box.green { background: linear-gradient(135deg, #059669, #047857); color: #fff }
+    .flow-arr {
+      font-size: 22px; color: #6d28d9; font-weight: 900;
+      padding: 0 6px; flex-shrink: 0;
+    }
+    .flow-sub {
+      font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.95);
+      display: block; margin-top: 2px;
+    }
+    .flow-box.light .flow-sub { color: #4338ca }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 99px; font-size: 10px; font-weight: 800;
+    }
+    .bdg-admin    { background: #fff7ed; color: #c2410c; border: 2px solid #fed7aa }
+    .bdg-operator { background: #dbeafe; color: #1d4ed8; border: 2px solid #bfdbfe }
+    .bdg-viewer   { background: #ede9fe; color: #6d28d9; border: 2px solid #c4b5fd }
+    .bdg-requester{ background: #dcfce7; color: #15803d; border: 2px solid #86efac }
+    .bdg-step {
+      background: linear-gradient(135deg, #6d28d9, #4338ca);
+      color: #fff; border-radius: 50%;
+      width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 900;
+    }
+
+    /* ── CODE MONO ── */
+    .mono {
+      font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+      background: #eef2ff;
+      color: #312e81;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      border: 1px solid #e0e7ff;
+    }
+
+    /* ── INFO BOX ── */
+    .info-box {
+      background: linear-gradient(135deg, #f5f3ff, #eef2ff);
+      border: 2px solid #e0e7ff;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      line-height: 1.75;
+      color: #1e1b4b;
+    }
+
+    /* ── TWO-COL LAYOUT ── */
+    .two-col { display: flex; gap: 16px; margin-bottom: 22px }
+    .two-col .col { flex: 1 }
+
+    /* ── SIGNATURE BLOCK ── */
+    .sig-section { margin-top: 28px; margin-bottom: 10px }
+    .sig-section h2 { border-radius: 6px }
+    .sig-grid {
+      display: flex; gap: 0;
+      border: 2px solid #e0e7ff; border-top: none;
+      border-radius: 0 0 8px 8px; overflow: hidden;
+    }
+    .sig-card {
+      flex: 1; padding: 22px 24px;
+      border-right: 2px solid #e0e7ff;
+      background: linear-gradient(180deg, #fff 0%, #faf8ff 100%);
+    }
+    .sig-card:last-child { border-right: none }
+    .sig-role-tag {
+      display: inline-block;
+      font-size: 9px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .7px;
+      background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+      color: #4c1d95;
+      border: 2px solid #c4b5fd;
+      border-radius: 4px; padding: 3px 10px;
+      margin-bottom: 14px;
+    }
+    .sig-name  { font-size: 16px; font-weight: 900; color: #1e1b4b; margin-bottom: 3px }
+    .sig-desig { font-size: 12px; color: #4c1d95; font-weight: 800; margin-bottom: 2px }
+    .sig-org   { font-size: 11px; color: #4338ca; font-weight: 600; margin-bottom: 12px }
+    .sig-email { font-size: 11px; color: #312e81; font-family: 'Consolas', monospace; font-weight: 600 }
+    .sig-line-box {
+      margin-top: 18px;
+      border-top: 2px dashed #c4b5fd;
+      padding-top: 10px;
+    }
+    .sig-line { display: flex; justify-content: space-between; align-items: flex-end }
+    .sig-line-label { font-size: 9px; color: #6366f1; font-weight: 700; text-transform: uppercase; letter-spacing: .5px }
+    .sig-line-value { width: 160px; border-bottom: 2px solid #6d28d9; height: 22px }
+
+    /* ── PAGE BREAK ── */
+    .page-break { page-break-before: always }
+
+    /* ── TOPOLOGY DIAGRAM ── */
+    .topo-wrap {
+      border: 2px solid #e0e7ff; border-top: none;
+      border-radius: 0 0 8px 8px;
+      padding: 20px 16px;
+      margin-bottom: 22px;
+      background: linear-gradient(135deg, #faf9ff 0%, #f0f0ff 100%);
+    }
+    .topo-layer { margin-bottom: 8px }
+    .topo-label {
+      font-size: 9px; font-weight: 900; color: #4338ca;
+      text-transform: uppercase; letter-spacing: .8px;
+      margin-bottom: 6px; padding-left: 4px;
+    }
+    .topo-row {
+      display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
+    }
+    .topo-box {
+      flex: 1; border-radius: 8px; padding: 10px 8px;
+      text-align: center; font-size: 11px; font-weight: 800;
+      line-height: 1.45; border: 2px solid transparent;
+      min-width: 110px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .topo-box .tb-sub {
+      font-size: 9px; font-weight: 600; color: inherit;
+      opacity: 1; display: block; margin-top: 3px;
+    }
+    .topo-box.user  { background: linear-gradient(180deg, #ede9fe, #e0e7ff); color: #312e81; border-color: #a5b4fc; max-width: 140px }
+    .topo-box.front { background: linear-gradient(180deg, #dbeafe, #bfdbfe); color: #1e3a8a; border-color: #60a5fa }
+    .topo-box.back  { background: linear-gradient(180deg, #d1fae5, #a7f3d0); color: #064e3b; border-color: #34d399 }
+    .topo-box.ext   { background: linear-gradient(180deg, #fff7ed, #fef3c7); color: #78350f; border-color: #fbbf24 }
+    .topo-box.db    { background: linear-gradient(180deg, #fce7f3, #fbcfe8); color: #831843; border-color: #f472b6 }
+    .topo-box.net   { background: linear-gradient(180deg, #f1f5f9, #e2e8f0); color: #1e293b; border-color: #94a3b8 }
+    .topo-arrow-row {
+      display: flex; justify-content: center; align-items: center;
+      margin: 4px 0; gap: 8px;
+    }
+    .topo-arrow-row .arr-line {
+      flex: 1; height: 0;
+      border-top: 2px dashed #a5b4fc;
+      max-width: 600px;
+    }
+    .topo-arrow-row .arr-label {
+      font-size: 9px; color: #4338ca; font-weight: 700; white-space: nowrap;
+      background: #f0f0ff; padding: 2px 10px; border-radius: 4px;
+    }
+    .topo-arrow-down {
+      text-align: center; font-size: 18px; color: #6d28d9;
+      font-weight: 900;
+      line-height: 1; margin: 3px 0;
+    }
+    .topo-divider {
+      border: none; border-top: 2px dashed #e0e7ff; margin: 10px 0;
+    }
+
+    /* ── PLATFORM BADGE COLORS ── */
+    .plat-vmware   { color: #166534; font-weight: 800 }
+    .plat-ocp      { color: #dc2626; font-weight: 800 }
+    .plat-nutanix  { color: #0284c7; font-weight: 800 }
+    .plat-ansible  { color: #1d4ed8; font-weight: 800 }
+    .plat-aws      { color: #d97706; font-weight: 800 }
+    .plat-hyperv   { color: #7c3aed; font-weight: 800 }
+    .plat-storage  { color: #0891b2; font-weight: 800 }
+    .plat-backup   { color: #be123c; font-weight: 800 }
+    .plat-cmdb     { color: #059669; font-weight: 800 }
+    .plat-ipam     { color: #7c3aed; font-weight: 800 }
+    .plat-ad       { color: #4338ca; font-weight: 800 }
+    .plat-insights { color: #c026d3; font-weight: 800 }
+
+    /* ── COLORED ROW ACCENTS ── */
+    .row-vmware td:first-child   { border-left: 4px solid #16a34a }
+    .row-ocp td:first-child      { border-left: 4px solid #ef4444 }
+    .row-nutanix td:first-child  { border-left: 4px solid #0ea5e9 }
+    .row-ansible td:first-child  { border-left: 4px solid #3b82f6 }
+    .row-aws td:first-child      { border-left: 4px solid #f59e0b }
+    .row-hyperv td:first-child   { border-left: 4px solid #8b5cf6 }
+    .row-storage td:first-child  { border-left: 4px solid #06b6d4 }
+    .row-rubrik td:first-child   { border-left: 4px solid #f43f5e }
+    .row-cohesity td:first-child { border-left: 4px solid #e11d48 }
+    .row-veeam td:first-child    { border-left: 4px solid #84cc16 }
+    .row-cmdb td:first-child     { border-left: 4px solid #10b981 }
+    .row-ipam td:first-child     { border-left: 4px solid #a855f7 }
+    .row-ad td:first-child       { border-left: 4px solid #6366f1 }
+    .row-insights td:first-child { border-left: 4px solid #d946ef }
+
+    /* ── SECTION-INTRO PARAGRAPH ── */
+    .section-intro {
+      font-size: 12px;
+      line-height: 1.7;
+      color: #1e1b4b;
+      font-weight: 500;
+      margin: 0 0 14px 0;
+    }
+    .section-intro strong {
+      color: #4c1d95;
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen-only action bar -->
+  <div class="actions">
+    <button class="btn-print" onclick="window.print()">Print / Save as PDF</button>
+    <button class="btn-close" onclick="window.close()">Close</button>
+  </div>
+
+  <!-- ================================================================
+       HEADER
+  ================================================================ -->
+  <div class="cover-header">
+    <img class="cover-logo" src="wings.png" alt="Wipro Wings" onerror="this.style.display='none'"/>
+    <div class="cover-right">
+      <div class="cover-title">LaaS Portal</div>
+      <div class="cover-subtitle">Architecture &amp; Design Document</div>
+      <div class="cover-meta">Compute as a Service &nbsp;&middot;&nbsp; Internal Infrastructure Portal &nbsp;&middot;&nbsp; CONFIDENTIAL</div>
+    </div>
+  </div>
+
+  <!-- Document Info Bar -->
+  <div class="doc-bar">
+    <div class="doc-bar-cell">
+      <div class="doc-bar-lbl">Document Version</div>
+      <div class="doc-bar-val">v2.0</div>
+    </div>
+    <div class="doc-bar-cell">
+      <div class="doc-bar-lbl">Classification</div>
+      <div class="doc-bar-val">Wipro Confidential</div>
+    </div>
+    <div class="doc-bar-cell">
+      <div class="doc-bar-lbl">Date</div>
+      <div class="doc-bar-val" id="docdate"></div>
+    </div>
+    <div class="doc-bar-cell">
+      <div class="doc-bar-lbl">Prepared By</div>
+      <div class="doc-bar-val">Sekhar Perumal</div>
+    </div>
+    <div class="doc-bar-cell">
+      <div class="doc-bar-lbl">Reviewed &amp; Approved By</div>
+      <div class="doc-bar-val">Khalid Khan</div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       1. EXECUTIVE SUMMARY
+  ================================================================ -->
+  <h2><span class="h2-num">01</span>Executive Summary</h2>
+  <div class="tbl-wrap" style="padding:0">
+    <div class="summary-box" style="margin:0; border-radius:0 0 8px 8px; border-left:none; border-top: 4px solid #6d28d9">
+      <div class="s-title">Overview</div>
+      LaaS (Lab as a Service) Dashboard is a self-hosted internal web portal built for managing multi-platform lab infrastructure across the SDX Data Centre and Disaster Recovery sites. It provides a unified interface for <strong>VMware vSphere</strong>, <strong>Red Hat OpenShift</strong>, <strong>Nutanix Prism Central</strong>, <strong>Ansible Automation Platform</strong>, <strong>Amazon Web Services</strong>, <strong>Microsoft Hyper-V</strong>, <strong>Enterprise Storage</strong> (Pure, Dell, HPE, NetApp), <strong>Backup &amp; Data Protection</strong> (Rubrik, Cohesity, Veeam), <strong>IPAM</strong>, <strong>CMDB</strong>, <strong>Active Directory &amp; DNS</strong>, and <strong>Insights &amp; Analytics</strong> — all from a single browser window.
+      <br/><br/>
+      The portal follows a three-tier architecture: a React 18 single-page application (SPA) served over HTTPS handles all user interactions, a FastAPI Python backend (~6,400 lines) exposes a secure REST API integrating with 8+ platform APIs, and a dual-database layer using SQLite (operational data) and PostgreSQL 16 (analytics &amp; CMDB). All tiers run as NSSM-managed Windows services on the same host, accessible at
+      <span class="mono">https://caas-dashboard.sdxtest.local</span>.
+    </div>
+  </div>
+
+  <!-- KPI Tiles -->
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-val">React 18</div><div class="kpi-lbl">Frontend Framework</div></div>
+    <div class="kpi"><div class="kpi-val">FastAPI</div><div class="kpi-lbl">Backend Framework</div></div>
+    <div class="kpi"><div class="kpi-val">SQLite + PG</div><div class="kpi-lbl">Dual Database</div></div>
+    <div class="kpi"><div class="kpi-val">TLS 1.2+</div><div class="kpi-lbl">Transport Security</div></div>
+    <div class="kpi"><div class="kpi-val">AD + Local</div><div class="kpi-lbl">Authentication</div></div>
+    <div class="kpi"><div class="kpi-val">NSSM</div><div class="kpi-lbl">Service Manager</div></div>
+    <div class="kpi"><div class="kpi-val">4 Roles</div><div class="kpi-lbl">Access Control</div></div>
+    <div class="kpi"><div class="kpi-val">8+ Platforms</div><div class="kpi-lbl">Multi-Platform</div></div>
+    <div class="kpi"><div class="kpi-val">Port 443</div><div class="kpi-lbl">HTTPS Endpoint</div></div>
+  </div>
+
+  <!-- ================================================================
+       2. SYSTEM ARCHITECTURE
+  ================================================================ -->
+  <h2><span class="h2-num">02</span>System Architecture</h2>
+  <div class="flow-wrap">
+    <div class="flow-row">
+      <div class="flow-box light">
+        End User<br/>
+        <span class="flow-sub">Browser (Chrome / Edge)</span>
+      </div>
+      <div class="flow-arr">&#8594;</div>
+      <div class="flow-box">
+        HTTP :80<br/>
+        <span class="flow-sub">Redirect to HTTPS</span>
+      </div>
+      <div class="flow-arr">&#8594;</div>
+      <div class="flow-box">
+        HTTPS :443<br/>
+        <span class="flow-sub">Node.js File Server</span>
+      </div>
+      <div class="flow-arr">&#8594;</div>
+      <div class="flow-box light">
+        React SPA<br/>
+        <span class="flow-sub">App.jsx (frontend)</span>
+      </div>
+      <div class="flow-arr">&#8594;</div>
+      <div class="flow-box">
+        HTTPS :8443<br/>
+        <span class="flow-sub">FastAPI REST API</span>
+      </div>
+      <div class="flow-arr">&#8594;</div>
+      <div class="flow-box light">
+        SQLite + PostgreSQL<br/>
+        <span class="flow-sub">+ 8 Platform APIs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       3. HIGH-LEVEL TOPOLOGY
+  ================================================================ -->
+  <h2><span class="h2-num">03</span>High-Level Topology</h2>
+  <div class="topo-wrap">
+
+    <!-- Row: User Roles -->
+    <div class="topo-layer">
+      <div class="topo-label">User Roles</div>
+      <div class="topo-row">
+        <div class="topo-box user">Admin<span class="tb-sub">Full Access</span></div>
+        <div class="topo-box user">Operator<span class="tb-sub">Operational</span></div>
+        <div class="topo-box user">Viewer<span class="tb-sub">Read-Only</span></div>
+        <div class="topo-box user">Requester<span class="tb-sub">Self-Service</span></div>
+      </div>
+    </div>
+
+    <div class="topo-arrow-down">&#8595;</div>
+    <div class="topo-arrow-row"><div class="arr-line"></div><div class="arr-label">HTTPS Browser Session (TLS 1.2+)</div><div class="arr-line"></div></div>
+    <div class="topo-arrow-down">&#8595;</div>
+
+    <!-- Row: Frontend Tier -->
+    <div class="topo-layer">
+      <div class="topo-label">Frontend Tier &nbsp;&middot;&nbsp; Windows Server &nbsp;&middot;&nbsp; NSSM Services: CaaS-Frontend / CaaS-Frontend-HTTPS</div>
+      <div class="topo-row">
+        <div class="topo-box front">Port 80 &mdash; HTTP Redirect<span class="tb-sub">Node.js (https_server.cjs)</span></div>
+        <div class="topo-box front">Port 443 &mdash; HTTPS File Server<span class="tb-sub">Node.js serves dist/ (Vite build)</span></div>
+        <div class="topo-box front">React SPA<span class="tb-sub">App.jsx &ndash; All UI Pages + Components</span></div>
+        <div class="topo-box front">API Client<span class="tb-sub">api.js &ndash; fetch() to backend :8443</span></div>
+      </div>
+    </div>
+
+    <div class="topo-arrow-down">&#8595;</div>
+    <div class="topo-arrow-row"><div class="arr-line"></div><div class="arr-label">Internal REST API calls (HTTPS :8443 / JSON)</div><div class="arr-line"></div></div>
+    <div class="topo-arrow-down">&#8595;</div>
+
+    <!-- Row: Backend Tier -->
+    <div class="topo-layer">
+      <div class="topo-label">Backend Tier &nbsp;&middot;&nbsp; Windows Server &nbsp;&middot;&nbsp; NSSM Services: CaaS-Backend / CaaS-Backend-HTTPS &nbsp;&middot;&nbsp; 8+ Platform Integrations</div>
+      <div class="topo-row">
+        <div class="topo-box back">FastAPI (Python)<span class="tb-sub">Port 8443 &ndash; main.py</span></div>
+        <div class="topo-box back">Authentication<span class="tb-sub">auth.py &ndash; Admin / Local / AD</span></div>
+        <div class="topo-box back">Business Logic<span class="tb-sub">Chargeback, Requests, Audit</span></div>
+        <div class="topo-box back">Notifications<span class="tb-sub">notifications.json on disk</span></div>
+        <div class="topo-box back">Platform Clients<span class="tb-sub">VMware, OCP, Nutanix, AAP,<br/>AWS, Hyper-V, Storage, Backup</span></div>
+        <div class="topo-box back">CMDB &amp; Insights<span class="tb-sub">cmdb_client.py, daily_collector.py</span></div>
+      </div>
+    </div>
+
+    <div class="topo-arrow-down">&#8595;</div>
+
+    <!-- Row: Data & Integration -->
+    <div class="topo-layer">
+      <div class="topo-label">Data Layer &amp; External Integrations</div>
+      <div class="topo-row">
+        <div class="topo-box db">SQLite Database<span class="tb-sub">db.py &ndash; Users, Audit Log,<br/>VM Requests, Tag Owners, Platform Configs</span></div>
+        <div class="topo-box db">PostgreSQL 16<span class="tb-sub">Port 5433 &ndash; Daily Snapshots,<br/>CMDB CIs, IPAM, Insights</span></div>
+        <div class="topo-box ext">VMware vCenter<span class="tb-sub">pyVmomi &ndash; VMs, Tags,<br/>Capacity, Snapshots, Networks</span></div>
+        <div class="topo-box ext">OCP / Nutanix / AAP<span class="tb-sub">REST APIs &ndash; Clusters,<br/>Nodes, VMs, Jobs</span></div>
+        <div class="topo-box ext">AWS / Hyper-V<span class="tb-sub">boto3 / WinRM &ndash; EC2,<br/>S3, VPC, VMs, Checkpoints</span></div>
+        <div class="topo-box ext">Storage &amp; Backup<span class="tb-sub">Pure, Dell, HPE, NetApp,<br/>Rubrik, Cohesity, Veeam</span></div>
+        <div class="topo-box ext">Active Directory<span class="tb-sub">LDAP &ndash; Auth, Users, Groups,<br/>DNS Zones &amp; Records</span></div>
+        <div class="topo-box net">TLS Certificates<span class="tb-sub">certs/caas.crt + caas.key<br/>Self-signed, multi-SAN</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ================================================================
+       4. FRONTEND SPECIFICATION
+  ================================================================ -->
+  <h2><span class="h2-num">04</span>Frontend Specification</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:22%">Attribute</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="lbl">Framework</span></td><td>React 18 - Single-Page Application (SPA). All UI rendered client-side; no server-side rendering.</td></tr>
+        <tr><td><span class="lbl">Build Tool</span></td><td>Vite - compiles and optimises source into static assets under <span class="mono">frontend/dist/</span>. Build command: <span class="mono">npm run build</span></td></tr>
+        <tr><td><span class="lbl">Source Code</span></td><td><span class="mono">frontend/src/App.jsx</span> - single file containing all pages, components, state management and PDF export logic (approx. 24,000+ lines)</td></tr>
+        <tr><td><span class="lbl">API Client</span></td><td><span class="mono">frontend/src/api.js</span> - all HTTP fetch wrappers for every backend REST endpoint</td></tr>
+        <tr><td><span class="lbl">HTTPS Server</span></td><td><span class="mono">frontend/https_server.cjs</span> - Node.js static file server listening on port 443. Port 80 redirects to HTTPS using the incoming Host header to preserve the DNS name.</td></tr>
+        <tr><td><span class="lbl">Windows Services</span></td><td><span class="mono">CaaS-Frontend</span> (port 80 HTTP redirect) and <span class="mono">CaaS-Frontend-HTTPS</span> (port 443) - both registered and managed via NSSM</td></tr>
+        <tr><td><span class="lbl">Theming Engine</span></td><td>Three built-in themes: Dark, Light, and Wings (Wipro brand colours). Active palette is passed as a prop to every component; no CSS framework used.</td></tr>
+        <tr><td><span class="lbl">Navigation Pages</span></td><td>Overview, VMware (Virtual Machines), Snapshots, Networks, Capacity, Project Utilization, Chargeback, VM Requests, Red Hat OpenShift, Nutanix, Ansible AAP, Amazon Web Services, Microsoft Hyper-V, Storage Management, Backup &amp; Data Protection, IPAM, CMDB, Asset Management, Active Directory &amp; DNS, Insights &amp; Analytics, History, Forecast, Audit Log, User Management</td></tr>
+        <tr><td><span class="lbl">PDF Exports</span></td><td>In-browser PDF export available for: individual VM tag reports, overall Project Utilization, and VM tag popup detail views - all styled with Wipro branding.</td></tr>
+        <tr><td><span class="lbl">Deployment URL</span></td><td><span class="mono">https://caas-dashboard.sdxtest.local</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       5. BACKEND SPECIFICATION
+  ================================================================ -->
+  <h2><span class="h2-num">05</span>Backend Specification</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:22%">Attribute</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="lbl">Framework</span></td><td>FastAPI (Python) - asynchronous REST API with automatic OpenAPI documentation</td></tr>
+        <tr><td><span class="lbl">Entry Point</span></td><td><span class="mono">backend/main.py</span> - all API route definitions and middleware</td></tr>
+        <tr><td><span class="lbl">Authentication Module</span></td><td><span class="mono">backend/auth.py</span> - three-step login: hardcoded admin check, local DB user verification, then Active Directory / LDAP bind</td></tr>
+        <tr><td><span class="lbl">Database Layer</span></td><td><span class="mono">backend/db.py</span> - SQLite operations using Python built-in <span class="mono">sqlite3</span> module; PostgreSQL operations via <span class="mono">psycopg2</span> for daily snapshots, CMDB, IPAM and Insights.</td></tr>
+        <tr><td><span class="lbl">Listening Port</span></td><td>8443 (HTTPS) - TLS terminated directly by the FastAPI/Uvicorn process using <span class="mono">certs/caas.crt</span> and <span class="mono">certs/caas.key</span></td></tr>
+        <tr><td><span class="lbl">Windows Services</span></td><td><span class="mono">CaaS-Backend</span> and <span class="mono">CaaS-Backend-HTTPS</span> - managed by NSSM</td></tr>
+        <tr><td><span class="lbl">vCenter Integration</span></td><td>Backend calls VMware vCenter via pyVmomi and REST APIs to retrieve live VM inventory, VMware tags, capacity metrics, snapshot data, and network port groups</td></tr>
+        <tr class="row-ocp"><td><span class="lbl">OpenShift Integration</span></td><td>REST API calls to OCP clusters for nodes, pods, namespaces, operators, routes, PVCs, storage classes and RHOAI workbenches</td></tr>
+        <tr class="row-nutanix"><td><span class="lbl">Nutanix Integration</span></td><td>Prism Central v3 API for AHV VMs, hosts, clusters, storage containers, subnets, images and alerts</td></tr>
+        <tr class="row-ansible"><td><span class="lbl">Ansible AAP Integration</span></td><td>AAP REST API for job templates, inventories, credentials, job launch with real-time stdout streaming</td></tr>
+        <tr class="row-aws"><td><span class="lbl">AWS Integration</span></td><td>boto3 SDK for EC2, S3, RDS, VPC, subnet IP utilisation and Cost Explorer</td></tr>
+        <tr class="row-hyperv"><td><span class="lbl">Hyper-V Integration</span></td><td>WinRM / pywinrm PowerShell remoting for VM inventory, power actions and checkpoint management</td></tr>
+        <tr class="row-storage"><td><span class="lbl">Storage Integration</span></td><td>REST APIs for Pure Storage FlashArray/FlashBlade, Dell EMC PowerStore/PowerScale, HPE Alletra/Primera, NetApp ONTAP &mdash; volume, LUN, host, share, and capacity management</td></tr>
+        <tr class="row-rubrik"><td><span class="lbl">Backup Integration</span></td><td>Rubrik CDM API, Cohesity REST API, Veeam Enterprise Manager API for SLA management, snapshots, recovery and job monitoring</td></tr>
+        <tr class="row-cmdb"><td><span class="lbl">CMDB Module</span></td><td>Collects 1,800+ Configuration Items from all platforms, stores in PostgreSQL with ServiceNow-aligned CI classes and push-to-SN capability</td></tr>
+        <tr class="row-insights"><td><span class="lbl">Insights &amp; Analytics</span></td><td>Daily collector captures snapshots from 8 platforms into PostgreSQL; Health Scorecard, Change Detection, Capacity Forecasting, Backup and Storage Analytics</td></tr>
+        <tr class="row-ipam"><td><span class="lbl">IPAM (PostgreSQL)</span></td><td>IPAM data collected daily into PostgreSQL &mdash; VLANs, subnets, IP counts, utilisation tracking with historical trends</td></tr>
+        <tr class="row-insights"><td><span class="lbl">PostgreSQL 16</span></td><td>Dedicated analytics database on port 5433 (database: <span class="mono">caas_dashboard</span>) storing 12 daily snapshot tables, CMDB CIs, and IPAM records</td></tr>
+        <tr><td><span class="lbl">Notifications</span></td><td>Ticker messages persisted to <span class="mono">notifications.json</span> on disk, exposed via <span class="mono">GET /api/notifications</span> and <span class="mono">POST /api/notifications</span></td></tr>
+        <tr><td><span class="lbl">Chargeback</span></td><td>VM resource costs computed per-tag in INR and USD based on configurable pricing rates stored via the Pricing Manager</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       6. DATABASE SCHEMA
+  ================================================================ -->
+  <h2><span class="h2-num">06</span>Database Schema (SQLite + PostgreSQL)</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:24%">Table Name</th><th style="width:30%">Purpose</th><th>Key Columns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="mono">users</span></td>
+          <td>All portal user accounts</td>
+          <td><span class="mono">username, display_name, email, role, auth_source, password_hash, last_login, created_at</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">audit_log</span></td>
+          <td>Full audit trail of every user action</td>
+          <td><span class="mono">ts (UTC), username, role, action, target, detail, result</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">vm_requests</span></td>
+          <td>VM provisioning requests with approval workflow</td>
+          <td><span class="mono">req_number, requester, status, reviewed_by, reviewed_at, created_at, updated_at</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">project_tag_owners</span></td>
+          <td>VMware tag to owner and email mapping</td>
+          <td><span class="mono">tag_name, owner_name, owner_email, vcenter, updated_at</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">storage_arrays</span></td>
+          <td>Registered storage arrays (Pure, Dell, HPE, NetApp)</td>
+          <td><span class="mono">id, name, vendor, ip, port, username, password, site, capacity_tb, api_token, console_url</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">bm_servers</span></td>
+          <td>Bare-metal / physical server registrations</td>
+          <td><span class="mono">id, name, ip, model, serial, bmc_type, location, status</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">ocp_clusters</span></td>
+          <td>OpenShift cluster connections</td>
+          <td><span class="mono">id, name, host, api_url, token, rhoai_url, status</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">nutanix_pcs</span></td>
+          <td>Nutanix Prism Central connections</td>
+          <td><span class="mono">id, name, ip, username, password, site</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">aap_instances</span></td>
+          <td>Ansible Automation Platform connections</td>
+          <td><span class="mono">id, name, host, username, password, verify_ssl</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">hyperv_hosts</span></td>
+          <td>Hyper-V host connections</td>
+          <td><span class="mono">id, name, host, username, password, port</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">aws_accounts</span></td>
+          <td>AWS account configurations</td>
+          <td><span class="mono">id, name, access_key, secret_key, region, sso_token</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">rubrik_clusters</span></td>
+          <td>Rubrik CDM cluster connections</td>
+          <td><span class="mono">id, name, host, token</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">cohesity_clusters</span></td>
+          <td>Cohesity DataProtect connections</td>
+          <td><span class="mono">id, name, host, username, password, api_key</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">veeam_servers</span></td>
+          <td>Veeam B&amp;R server connections</td>
+          <td><span class="mono">id, name, host, username, password, port</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="color:#6d28d9;margin-top:18px;margin-bottom:10px;font-size:15px;">PostgreSQL 16 Database &nbsp;(caas_dashboard &mdash; port 5433)</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:24%">Table Name</th><th style="width:30%">Purpose</th><th>Key Columns</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="mono">daily_snapshots</span></td>
+          <td>Daily platform-wide metrics</td>
+          <td><span class="mono">id, snapshot_date, total_vms, running_vms, total_hosts, cpu_avg_pct, mem_avg_pct, storage_used_pct, ocp_clusters, ocp_nodes, ocp_pods, nutanix_vms, aws_ec2_count, hyperv_vm_count</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_vm_snapshots</span></td>
+          <td>Per-VM daily snapshots</td>
+          <td><span class="mono">id, snapshot_date, vcenter_id, vm_name, status, cpu, ram_mb, disk_gb, host, os, ip, project_tag</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_host_snapshots</span></td>
+          <td>Per-host daily snapshots</td>
+          <td><span class="mono">id, snapshot_date, vcenter_id, host_name, status, cpu_used_pct, ram_used_pct, vm_count</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_ds_snapshots</span></td>
+          <td>Per-datastore daily snapshots</td>
+          <td><span class="mono">id, snapshot_date, vcenter_id, ds_name, capacity_gb, used_gb, free_gb</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_ocp_snapshots</span></td>
+          <td>Per-OCP-cluster daily snapshots</td>
+          <td><span class="mono">id, snapshot_date, cluster_id, cluster_name, node_count, pod_count, namespace_count, cpu_pct, mem_pct</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_nutanix_snapshots</span></td>
+          <td>Per-Nutanix-PC daily snapshots</td>
+          <td><span class="mono">id, snapshot_date, pc_id, pc_name, vm_count, host_count, cluster_count, storage_used_tb</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">daily_project_snapshots</span></td>
+          <td>Per-project resource snapshots</td>
+          <td><span class="mono">id, snapshot_date, project_tag, vm_count, total_cpu, total_ram_gb, total_disk_gb</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">chargeback_snapshots</span></td>
+          <td>Monthly chargeback cost snapshots</td>
+          <td><span class="mono">id, snapshot_date, platform, project_tag, monthly_cost_inr, monthly_cost_usd</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">ipam_vlans</span></td>
+          <td>IPAM VLAN / subnet records</td>
+          <td><span class="mono">id, vlan_id, name, subnet, cidr, gateway, site, total_ips, used_ips, free_ips, utilisation_pct</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">ipam_ips</span></td>
+          <td>Individual IP address records</td>
+          <td><span class="mono">id, vlan_id, ip_address, status, hostname, mac_address, last_seen</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">cmdb_ci</span></td>
+          <td>CMDB Configuration Items (ServiceNow-aligned)</td>
+          <td><span class="mono">id, sys_class_name, name, correlation_id, operational_status, environment, ip_address, os, manufacturer, serial_number, source_platform, sn_push_status</span></td>
+        </tr>
+        <tr>
+          <td><span class="mono">cmdb_sn_config</span></td>
+          <td>ServiceNow CMDB push configuration</td>
+          <td><span class="mono">id, instance_url, username, default_company, push_vm, push_host, push_storage, last_push_at, last_push_status</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       7. AUTHENTICATION FLOW
+  ================================================================ -->
+  <h2><span class="h2-num">07</span>Authentication Flow</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:8%">Step</th><th style="width:22%">Method</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="text-align:center"><span class="bdg-step">1</span></td>
+          <td><span class="badge bdg-admin">Hardcoded Admin</span></td>
+          <td>A bootstrap administrator account is checked first. This guarantees portal access before any users are provisioned in the database. Credentials are defined in the backend configuration.</td>
+        </tr>
+        <tr>
+          <td style="text-align:center"><span class="bdg-step">2</span></td>
+          <td><span class="badge bdg-operator">Local DB User</span></td>
+          <td>Passwords are stored as PBKDF2-SHA256 hashes (with salt) in SQLite. Local users are created by an Admin through the User Management page. Ideal for service accounts or non-AD users.</td>
+        </tr>
+        <tr>
+          <td style="text-align:center"><span class="bdg-step">3</span></td>
+          <td><span class="badge bdg-viewer">Active Directory</span></td>
+          <td>LDAP bind performed against the corporate Active Directory. On first successful login, the user record is automatically created or updated (upserted) in SQLite. The email address is captured from the AD profile and stored locally.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       8. ROLE-BASED ACCESS CONTROL
+  ================================================================ -->
+  <h2><span class="h2-num">08</span>Role-Based Access Control</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:14%">Role</th><th style="width:16%">Access Level</th><th>Capabilities</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge bdg-admin">Admin</span></td>
+          <td>Full Access</td>
+          <td>All navigation pages, user management (create, edit, delete, assign roles), approve or decline VM provisioning requests, view all users audit logs, manage VMware tag owners, configure pricing and vCenter connections.</td>
+        </tr>
+        <tr>
+          <td><span class="badge bdg-operator">Operator</span></td>
+          <td>Operational</td>
+          <td>All infrastructure pages (VMs, Capacity, Snapshots, Networks, Project Utilization), approve or decline VM requests, view audit logs. Cannot manage user accounts or change role assignments.</td>
+        </tr>
+        <tr>
+          <td><span class="badge bdg-viewer">Viewer</span></td>
+          <td>Read-Only</td>
+          <td>Overview dashboard, Virtual Machines, Project Utilization, Capacity, Snapshots, and Networks pages in read-only mode. Cannot submit VM requests, access audit logs, or modify any data.</td>
+        </tr>
+        <tr>
+          <td><span class="badge bdg-requester">Requester</span></td>
+          <td>Self-Service</td>
+          <td>Submit new VM provisioning requests, track own request status, and view personal audit trail. No access to infrastructure dashboards or other users data.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       9. SSL / TLS AND DNS
+  ================================================================ -->
+  <h2><span class="h2-num">09</span>SSL / TLS Configuration and DNS</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:28%">Item</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="lbl">Certificate File</span></td><td><span class="mono">certs/caas.crt</span> - self-signed X.509 certificate shared by both frontend and backend services</td></tr>
+        <tr><td><span class="lbl">Private Key</span></td><td><span class="mono">certs/caas.key</span> - RSA private key corresponding to the certificate</td></tr>
+        <tr><td><span class="lbl">Subject Alternative Names</span></td><td><span class="mono">caas-dashboard.sdxtest.local</span>, <span class="mono">caas-dashboard</span>, <span class="mono">localhost</span>, <span class="mono">172.17.70.100</span></td></tr>
+        <tr><td><span class="lbl">Primary DNS Name</span></td><td><span class="mono">caas-dashboard.sdxtest.local</span> - registered in internal DNS, resolves to the server IP address</td></tr>
+        <tr><td><span class="lbl">HTTP Redirect</span></td><td>Port 80 automatically redirects all HTTP traffic to HTTPS. The redirect preserves the original Host header so DNS-based access works correctly.</td></tr>
+        <tr><td><span class="lbl">TLS Version</span></td><td>TLS 1.2 and above enforced by Node.js (frontend) and Uvicorn (backend)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       10. KEY FILE STRUCTURE
+  ================================================================ -->
+  <h2><span class="h2-num">10</span>Key File Structure</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:42%">File / Path</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="mono">frontend/src/App.jsx</span></td><td>Entire React frontend - all pages, components, state management and PDF export functions</td></tr>
+        <tr><td><span class="mono">frontend/src/api.js</span></td><td>All API client helper functions used by the frontend to communicate with the backend</td></tr>
+        <tr><td><span class="mono">frontend/https_server.cjs</span></td><td>Node.js HTTPS static file server with HTTP-to-HTTPS redirect logic</td></tr>
+        <tr><td><span class="mono">frontend/dist/</span></td><td>Production build output served to browsers. Regenerated by running <span class="mono">npm run build</span></td></tr>
+        <tr><td><span class="mono">backend/main.py</span></td><td>FastAPI application entry point (~6,400 lines) containing all REST API route definitions for 8+ platforms</td></tr>
+        <tr><td><span class="mono">backend/vmware_client.py</span></td><td>VMware vCenter integration: pyVmomi connections, VM/host/datastore/snapshot/network operations</td></tr>
+        <tr><td><span class="mono">backend/openshift_client.py</span></td><td>OpenShift REST API: clusters, nodes, pods, namespaces, operators, routes, PVCs, events</td></tr>
+        <tr><td><span class="mono">backend/nutanix_client.py</span></td><td>Nutanix Prism Central v3 API: VMs, hosts, clusters, storage, subnets, images, alerts</td></tr>
+        <tr><td><span class="mono">backend/ansible_client.py</span></td><td>Ansible AAP REST API: templates, inventories, credentials, job launch, stdout streaming</td></tr>
+        <tr><td><span class="mono">backend/aws_client.py</span></td><td>AWS boto3 SDK: EC2, S3, RDS, VPC, subnets, Cost Explorer</td></tr>
+        <tr><td><span class="mono">backend/hyperv_client.py</span></td><td>Hyper-V WinRM/pywinrm: VM inventory, power actions, checkpoint management</td></tr>
+        <tr><td><span class="mono">backend/storage_client.py</span></td><td>Multi-vendor storage: Pure, Dell, HPE, NetApp array registration and capacity queries</td></tr>
+        <tr><td><span class="mono">backend/rubrik_client.py</span></td><td>Rubrik CDM: SLA domains, snapshots, live mount, instant recovery, file-level restore</td></tr>
+        <tr><td><span class="mono">backend/cohesity_client.py</span></td><td>Cohesity DataProtect: protection jobs, sources, snapshots, alerts, capacity</td></tr>
+        <tr><td><span class="mono">backend/veeam_client.py</span></td><td>Veeam B&amp;R: backup jobs, sessions, instant recovery, repository capacity</td></tr>
+        <tr><td><span class="mono">backend/cmdb_client.py</span></td><td>CMDB module: CI collection from all platforms, ServiceNow push, correlation dedup</td></tr>
+        <tr><td><span class="mono">backend/ipam_pg.py</span></td><td>IPAM PostgreSQL integration: VLANs, subnets, IP records, utilisation queries</td></tr>
+        <tr><td><span class="mono">backend/asset_client.py</span></td><td>Asset inventory: DC/DR Excel parsing, rack topology, ping &amp; power actions</td></tr>
+        <tr><td><span class="mono">backend/ad_client.py</span></td><td>Active Directory LDAP: user/group/OU management, DNS zones &amp; records</td></tr>
+        <tr><td><span class="mono">backend/daily_collector.py</span></td><td>Automated daily snapshot collector (runs 23:00) — captures 8-platform metrics into PostgreSQL</td></tr>
+        <tr><td><span class="mono">backend/auth.py</span></td><td>Authentication logic: local user verification, Active Directory LDAP integration, session handling</td></tr>
+        <tr><td><span class="mono">backend/db.py</span></td><td>SQLite database helpers: user CRUD operations, audit log writes, VM request management, tag owner updates</td></tr>
+        <tr><td><span class="mono">certs/caas.crt</span></td><td>TLS / SSL certificate (self-signed, covers all registered SANs)</td></tr>
+        <tr><td><span class="mono">certs/caas.key</span></td><td>TLS / SSL private key</td></tr>
+        <tr><td><span class="mono">notifications.json</span></td><td>Persistent storage file for notification ticker messages, read and written by the backend</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       11. SUPPORT CONTACTS
+  ================================================================ -->
+  <h2><span class="h2-num">11</span>Support Contacts</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:12%">Level</th><th style="width:20%">Team / Role</th><th style="width:24%">Contact</th><th>Scope</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:700;color:#06b6d4">L1</td>
+          <td>Operations Team<br/><span style="font-size:10px;color:#8b80c0">SDX INFRA &amp; DC Operations</span></td>
+          <td style="color:#8b80c0;font-size:11px">Refer helpdesk ticketing system</td>
+          <td>First-line triage, basic connectivity, service availability checks</td>
+        </tr>
+        <tr>
+          <td style="font-weight:700;color:#8b5cf6">L2</td>
+          <td>Technical Lead</td>
+          <td>
+            <strong>Sekhar Perumal</strong><br/>
+            <span class="mono" style="font-size:9.5px">sekhar.perumal@wipro.com</span>
+          </td>
+          <td>Application issues, code-level troubleshooting, backend API and database queries, vCenter integration</td>
+        </tr>
+        <tr>
+          <td style="font-weight:700;color:#f59e0b">L3</td>
+          <td>Engineering Head</td>
+          <td>
+            <strong>Khalid Khan</strong><br/>
+            <span class="mono" style="font-size:9.5px">khalid.khan@wipro.com</span>
+          </td>
+          <td>Architecture decisions, escalation approvals, change management, critical production incidents</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+       12. DOCUMENT SIGN-OFF
+  ================================================================ -->
+  <div class="sig-section">
+    <h2><span class="h2-num">12</span>Platform Integration Summary</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Platform</th><th>Integration Method</th><th>Backend Module</th><th>Key Capabilities</th></tr>
+      </thead>
+      <tbody>
+        <tr class="row-vmware"><td><strong class="plat-vmware">VMware vSphere</strong></td><td>pyVmomi + REST API</td><td><span class="mono">vmware_client.py</span></td><td>VM lifecycle, snapshots, cloning, migration, capacity, tags, networks</td></tr>
+        <tr class="row-ocp"><td><strong class="plat-ocp">Red Hat OpenShift</strong></td><td>OCP REST API + Bearer token</td><td><span class="mono">openshift_client.py</span></td><td>Clusters, nodes, pods, namespaces, operators, routes, PVCs, topology</td></tr>
+        <tr class="row-nutanix"><td><strong class="plat-nutanix">Nutanix AHV</strong></td><td>Prism Central v3 API</td><td><span class="mono">nutanix_client.py</span></td><td>VMs, hosts, clusters, storage, subnets, images, alerts, provisioning</td></tr>
+        <tr class="row-ansible"><td><strong class="plat-ansible">Ansible AAP</strong></td><td>AAP REST API</td><td><span class="mono">ansible_client.py</span></td><td>Templates, inventories, credentials, job launch, stdout streaming</td></tr>
+        <tr class="row-aws"><td><strong class="plat-aws">Amazon Web Services</strong></td><td>boto3 SDK</td><td><span class="mono">aws_client.py</span></td><td>EC2, S3, RDS, VPC, Cost Explorer, IAM/SSO token support</td></tr>
+        <tr class="row-hyperv"><td><strong class="plat-hyperv">Microsoft Hyper-V</strong></td><td>WinRM PowerShell</td><td><span class="mono">hyperv_client.py</span></td><td>VMs, power actions, checkpoints, per-host CPU/RAM bars</td></tr>
+        <tr class="row-storage"><td><strong class="plat-storage">Storage (4 vendors)</strong></td><td>Vendor REST APIs</td><td><span class="mono">storage_client.py</span></td><td>Pure, Dell, HPE, NetApp &mdash; volumes, LUNs, capacity, hosts, shares</td></tr>
+        <tr class="row-rubrik"><td><strong class="plat-backup">Rubrik</strong></td><td>Rubrik CDM API</td><td><span class="mono">rubrik_client.py</span></td><td>SLA domains, snapshots, live mount, instant recovery, file restore</td></tr>
+        <tr class="row-cohesity"><td><strong class="plat-backup">Cohesity</strong></td><td>Cohesity REST API</td><td><span class="mono">cohesity_client.py</span></td><td>Protection jobs, object snapshots, alerts, capacity, dedup stats</td></tr>
+        <tr class="row-veeam"><td><strong class="plat-backup">Veeam</strong></td><td>Enterprise Manager API</td><td><span class="mono">veeam_client.py</span></td><td>Backup jobs, sessions, instant recovery, repository monitoring</td></tr>
+        <tr class="row-cmdb"><td><strong class="plat-cmdb">CMDB</strong></td><td>Internal collector + SN API</td><td><span class="mono">cmdb_client.py</span></td><td>1,800+ CIs, ServiceNow push, correlation dedup, CI editing</td></tr>
+        <tr class="row-ipam"><td><strong class="plat-ipam">IPAM</strong></td><td>PostgreSQL daily snapshots</td><td><span class="mono">ipam_pg.py</span></td><td>VLANs, subnets, IP utilisation, top subnets, historical tracking</td></tr>
+        <tr class="row-ad"><td><strong class="plat-ad">Active Directory</strong></td><td>LDAP (ldap3)</td><td><span class="mono">ad_client.py</span></td><td>Users, groups, OUs, DNS zones, records, cache flush</td></tr>
+        <tr class="row-insights"><td><strong class="plat-insights">Insights &amp; Analytics</strong></td><td>PostgreSQL 16 snapshots</td><td><span class="mono">daily_collector.py</span></td><td>Health Scorecard, Change Detection, Capacity Forecasting, Executive Summary</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+   13. DAILY COLLECTOR & INSIGHTS
+  ================================================================ -->
+  <h2><span class="h2-num">13</span>Daily Collector &amp; Insights Architecture</h2>
+  <div class="tbl-wrap" style="padding:14px;">
+    <p class="section-intro">The <strong>Daily Collector</strong> (<span class="mono">daily_collector.py</span>) runs as a scheduled task at <strong>23:00 daily</strong>. It connects to all eight platforms, collects metrics, and inserts daily snapshot rows into <strong>PostgreSQL 16</strong> (port 5433, database <span class="mono">caas_dashboard</span>).</p>
+
+    <table style="margin-top:12px;">
+      <thead>
+        <tr><th style="width:30%">Aspect</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="lbl">Tables Populated</span></td><td>daily_snapshots, daily_vm_snapshots, daily_host_snapshots, daily_ds_snapshots, daily_ocp_snapshots, daily_nutanix_snapshots, daily_project_snapshots, chargeback_snapshots, ipam_vlans, ipam_ips</td></tr>
+        <tr><td><span class="lbl">Retention</span></td><td>30-day rolling window with automatic purge of older records</td></tr>
+        <tr><td><span class="lbl">Resilience</span></td><td>Retry logic with exponential back-off for transient failures across all platform APIs</td></tr>
+        <tr><td><span class="lbl">Schedule</span></td><td>Windows Task Scheduler: 23:00 daily, runs <span class="mono">daily_collector.py</span> via the backend Python venv</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="color:#6d28d9;margin-top:18px;margin-bottom:10px;font-size:15px;">Insights Tabs</h3>
+    <table>
+      <thead>
+        <tr><th style="width:30%">Tab</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr style="border-left:4px solid #16a34a"><td><strong style="color:#16a34a">&#9679; Health Scorecard</strong></td><td>RAG status (Red / Amber / Green) across all platforms with trend arrows and day-over-day comparisons</td></tr>
+        <tr style="border-left:4px solid #f59e0b"><td><strong style="color:#d97706">&#9651; Change Detection</strong></td><td>Day-over-day drift alerts for VM count, host count, pod count, IP utilisation and storage consumption</td></tr>
+        <tr style="border-left:4px solid #3b82f6"><td><strong style="color:#1d4ed8">&#9632; Capacity &amp; Cost</strong></td><td>Storage / compute exhaustion date predictions, monthly chargeback totals (&pound; / $ / &#x20B9;)</td></tr>
+        <tr style="border-left:4px solid #8b5cf6"><td><strong style="color:#6d28d9">&#9733; Executive Summary</strong></td><td>PDF-ready one-page KPI overview with platform health matrix and key metrics</td></tr>
+        <tr style="border-left:4px solid #ef4444"><td><strong style="color:#dc2626">&#9670; Backup Analytics</strong></td><td>Rubrik, Cohesity, Veeam job success/failure trends, SLA compliance, data growth</td></tr>
+        <tr style="border-left:4px solid #06b6d4"><td><strong style="color:#0891b2">&#9670; Storage Analytics</strong></td><td>Array capacity trends, volume growth curves, dedup ratios, exhaustion predictions</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+   14. CMDB ARCHITECTURE
+  ================================================================ -->
+  <h2><span class="h2-num">14</span>CMDB Architecture</h2>
+  <div class="tbl-wrap" style="padding:14px;">
+    <p class="section-intro">The <strong>CMDB module</strong> (<span class="mono">cmdb_client.py</span>) auto-discovers Configuration Items from all managed platforms and stores them in PostgreSQL table <span class="mono">cmdb_ci</span>.</p>
+
+    <table style="margin-top:12px;">
+      <thead>
+        <tr><th style="width:34%">CI Class (ServiceNow-aligned)</th><th>Source</th><th>Example</th></tr>
+      </thead>
+      <tbody>
+        <tr class="row-vmware"><td><span class="mono">cmdb_ci_vm_instance</span></td><td><strong class="plat-vmware">VMware</strong>, <strong class="plat-nutanix">Nutanix</strong>, <strong class="plat-hyperv">Hyper-V</strong></td><td>VM name, CPU, RAM, OS, IP, host</td></tr>
+        <tr class="row-vmware"><td><span class="mono">cmdb_ci_esx_server</span></td><td><strong class="plat-vmware">VMware vCenter</strong></td><td>ESXi hosts with serial, model, version</td></tr>
+        <tr class="row-hyperv"><td><span class="mono">cmdb_ci_win_server</span></td><td><strong class="plat-hyperv">Hyper-V</strong></td><td>Hyper-V host (Windows Server)</td></tr>
+        <tr class="row-nutanix"><td><span class="mono">cmdb_ci_nutanix_node</span></td><td><strong class="plat-nutanix">Nutanix Prism Central</strong></td><td>AHV node with serial, model, IP</td></tr>
+        <tr class="row-aws"><td><span class="mono">cmdb_ci_ec2_instance</span></td><td><strong class="plat-aws">Amazon Web Services</strong></td><td>EC2 instance with AMI, VPC, type</td></tr>
+        <tr class="row-storage"><td><span class="mono">cmdb_ci_storage_device</span></td><td><strong class="plat-storage">Pure / Dell / HPE / NetApp</strong></td><td>Array name, vendor, capacity</td></tr>
+        <tr class="row-ocp"><td><span class="mono">cmdb_ci_ocp_cluster / _node</span></td><td><strong class="plat-ocp">Red Hat OpenShift</strong></td><td>Cluster name, node roles, version</td></tr>
+        <tr><td><span class="mono">cmdb_ci_server</span></td><td><strong>Asset Management</strong></td><td>Physical DC/DR rack servers</td></tr>
+        <tr class="row-ipam"><td><span class="mono">cmdb_ci_ip_network</span></td><td><strong class="plat-ipam">IPAM</strong></td><td>VLAN/subnet with utilisation</td></tr>
+      </tbody>
+    </table>
+
+    <table style="margin-top:14px;">
+      <thead>
+        <tr><th style="width:30%">Feature</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="lbl">Deduplication</span></td><td>Each CI has a unique <span class="mono">correlation_id</span> (e.g. <span class="mono">vmware:vcenter1:vm-123</span>) used for upsert &mdash; repeated collections update existing records</td></tr>
+        <tr><td><span class="lbl">ServiceNow Push</span></td><td>Admins configure SN instance URL and credentials; CIs pushed via <span class="mono">/api/now/table/&lt;class&gt;</span> with dry-run preview</td></tr>
+        <tr><td><span class="lbl">Current Count</span></td><td>1,810 Configuration Items across 8 source platforms</td></tr>
+        <tr><td><span class="lbl">API Endpoints</span></td><td><span class="mono">GET /api/cmdb/summary</span>, <span class="mono">GET /api/cmdb/cis</span>, <span class="mono">POST /api/cmdb/collect</span>, <span class="mono">PATCH /api/cmdb/cis/{id}</span>, <span class="mono">POST /api/cmdb/push-to-sn</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ================================================================
+   15. DOCUMENT SIGN-OFF
+  ================================================================ -->
+  <h2><span class="h2-num">15</span>Document Sign-Off</h2>
+    <div class="sig-grid">
+
+      <!-- Prepared By -->
+      <div class="sig-card">
+        <div class="sig-role-tag">Prepared By</div>
+        <div class="sig-name">Sekhar Perumal</div>
+        <div class="sig-desig">Technical Lead</div>
+        <div class="sig-org">SDX INFRA &amp; DC Operations, Wipro</div>
+        <div class="sig-email">sekhar.perumal@wipro.com</div>
+      </div>
+
+      <!-- Reviewed & Approved By -->
+      <div class="sig-card">
+        <div class="sig-role-tag" style="background:linear-gradient(135deg,#fff7ed,#fef3c7);color:#c2410c;border:2px solid #fed7aa">Reviewed &amp; Approved By</div>
+        <div class="sig-name">Khalid Khan</div>
+        <div class="sig-desig">Engineering Head</div>
+        <div class="sig-org">SDX INFRA &amp; DC Operations, Wipro</div>
+        <div class="sig-email">khalid.khan@wipro.com</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================================================================
+       FIXED FOOTER
+  ================================================================ -->
+  <div class="pdf-footer">
+    <div class="foot-left">LaaS Portal &nbsp;&middot;&nbsp; Wipro Confidential &nbsp;&middot;&nbsp; SDX INFRA &amp; DC Operations</div>
+    <div class="foot-right">Architecture Document v2.0 &nbsp;&middot;&nbsp; <span id="footdate"></span></div>
+  </div>
+
+  <script>
+    var d = new Date().toLocaleDateString([], {day:'2-digit', month:'short', year:'numeric'});
+    document.getElementById('docdate').textContent = d;
+    document.getElementById('footdate').textContent = d;
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+2026-03-16 14:55:28,698 INFO OpenShift DB tables initialized
+2026-03-16 14:55:28,812 INFO Nutanix DB tables initialized
+INFO:     Started server process [88796]
+INFO:     Waiting for application startup.
+2026-03-16 14:55:28,962 INFO OpenShift DB tables initialized
+2026-03-16 14:55:28,963 INFO Baremetal DB tables initialized
+2026-03-16 14:55:28,964 INFO Nutanix DB tables initialized
+2026-03-16 14:55:28,966 INFO AAP DB tables initialized
+2026-03-16 14:55:28,967 INFO Storage DB tables initialized
+2026-03-16 14:55:28,969 INFO Rubrik DB table initialized
+2026-03-16 14:55:28,969 INFO CaaS Dashboard v5.0 started
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('0.0.0.0', 8000): [winerror 10048] only one usage of each socket address (protocol/network address/port) is normally permitted
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.

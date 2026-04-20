@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDx Lab Connectivity</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#080c14;overflow-y:auto;overflow-x:hidden}
+  #close-bar{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;
+    justify-content:space-between;padding:8px 18px;background:rgba(4,8,20,.95);
+    border-bottom:1px solid #1a3a5a;backdrop-filter:blur(6px)}
+  #close-bar .cb-title{font-family:'Exo 2',sans-serif;font-size:13px;font-weight:700;
+    letter-spacing:2px;text-transform:uppercase;color:#5cc8f8}
+  #close-bar button{background:linear-gradient(135deg,#0055aa,#0088cc);border:1px solid #00d4ff;
+    border-radius:6px;padding:5px 16px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;
+    letter-spacing:1px;box-shadow:0 0 12px rgba(0,180,255,.3);font-family:'Exo 2',sans-serif}
+  #close-bar button:hover{background:linear-gradient(135deg,#0077cc,#00aaee)}
+  .diagram-wrap{padding-top:52px !important}
+</style>
+</head>
+<body>
+<div id="close-bar">
+  <span class="cb-title">&#127760; SDx Lab Network Connectivity</span>
+  <button onclick="window.parent&&window.parent.postMessage('close-topo','*')">&#x2715; CLOSE</button>
+</div>
+
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #080c14;
+    font-family: 'Exo 2', sans-serif;
+    color: #c8d8f0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .diagram-wrap {
+    padding: 24px 20px 20px;
+    background: #080c14;
+    position: relative;
+  }
+
+  /* ── TITLE ── */
+  .diagram-title {
+    text-align: center;
+    margin-bottom: 22px;
+  }
+  .diagram-title h1 {
+    font-family: 'Exo 2', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: #e8f4ff;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .diagram-title p {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: #4a7fa5;
+    margin-top: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* ── GRID LAYOUT ── */
+  .net-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* ── TIER ROW ── */
+  .tier {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .tier-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #2c4a66;
+    margin-bottom: 4px;
+    align-self: flex-start;
+    padding-left: 4px;
+  }
+
+  .tier-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* ── CONNECTOR LINES ── */
+  .connector {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 32px;
+    position: relative;
+    width: 100%;
+  }
+
+  .v-line {
+    width: 2px;
+    height: 32px;
+    background: linear-gradient(180deg, #1a4a6e, #0f2d45);
+    position: relative;
+    overflow: hidden;
+  }
+  .v-line::after {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 40%;
+    background: linear-gradient(180deg, transparent, #00d4ff, transparent);
+    animation: flow-down 1.8s linear infinite;
+  }
+
+  .h-branch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    width: 100%;
+    height: 32px;
+  }
+
+  /* ── DEVICE CARDS ── */
+  .device {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    position: relative;
+  }
+
+  .device-box {
+    position: relative;
+    border-radius: 6px;
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-width: 120px;
+    border: 1px solid;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .device-box:hover {
+    transform: translateY(-2px);
+  }
+
+  .device-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+  .device-name {
+    font-family: 'Exo 2', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .device-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    text-align: center;
+    opacity: 0.65;
+    white-space: nowrap;
+  }
+
+  /* STATUS LED */
+  .led {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .led.green { background: #00e676; box-shadow: 0 0 6px #00e676; animation: blink 2.1s ease-in-out infinite; }
+  .led.amber { background: #ffb300; box-shadow: 0 0 6px #ffb300; animation: blink 1.4s ease-in-out infinite; }
+  .led.red   { background: #ff3d3d; box-shadow: 0 0 6px #ff3d3d; animation: blink 0.7s ease-in-out infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes flow-down { 0%{top:-100%} 100%{top:200%} }
+  @keyframes flow-up   { 0%{bottom:-100%} 100%{bottom:200%} }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.7; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  @keyframes scan { 0%{top:0%} 100%{top:100%} }
+
+  /* ── INTERNET CLOUD ── */
+  .cloud-box {
+    background: linear-gradient(135deg, #0a2540 0%, #0d3a5c 100%);
+    border: 1px solid #1a5a82;
+    border-radius: 12px;
+    padding: 14px 28px;
+    min-width: 180px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(0,180,255,0.15);
+  }
+  .cloud-box::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 8px,
+      rgba(0,180,255,0.03) 8px,
+      rgba(0,180,255,0.03) 9px
+    );
+  }
+  .cloud-name { font-size: 14px; font-weight: 700; color: #7de0ff; letter-spacing: 1px; }
+  .cloud-sub  { font-size: 10px; color: #4a90b0; margin-top: 3px; }
+
+  /* ── DEVICE THEMES ── */
+  .dev-internet { background: linear-gradient(135deg,#0e2235,#1a3a55); border-color: #2a6a9a; box-shadow: 0 4px 18px rgba(0,150,255,0.2); }
+  .dev-internet .device-name { color: #7de0ff; }
+
+  .dev-firewall { background: linear-gradient(135deg,#200e00,#3a1800); border-color: #8a3a00; box-shadow: 0 4px 18px rgba(255,120,0,0.2); }
+  .dev-firewall .device-name { color: #ffaa44; }
+
+  .dev-switch   { background: linear-gradient(135deg,#091828,#0e2540); border-color: #1e4a72; box-shadow: 0 4px 14px rgba(0,100,200,0.2); }
+  .dev-switch .device-name   { color: #5cc8f8; }
+
+  .dev-asa      { background: linear-gradient(135deg,#100a28,#1e1040); border-color: #4a2a90; box-shadow: 0 4px 18px rgba(120,60,220,0.25); }
+  .dev-asa .device-name      { color: #b08cff; }
+
+  .dev-offline  { background: linear-gradient(135deg,#1a0808,#2a1010); border-color: #6a1818; box-shadow: 0 4px 14px rgba(255,30,30,0.15); opacity: 0.7; }
+  .dev-offline .device-name  { color: #ff6666; }
+
+  .dev-patch    { background: linear-gradient(135deg,#0e1520,#121c28); border-color: #1e3040; }
+  .dev-patch .device-name    { color: #88aacc; }
+
+  .dev-wfh      { background: linear-gradient(135deg,#0a1a1a,#0e2828); border-color: #1a4a3a; }
+  .dev-wfh .device-name      { color: #44ccaa; }
+
+  /* ── SDx ZONE CONTAINERS ── */
+  .zones-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .sdx-zone {
+    border-radius: 10px;
+    border: 1px solid;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sdx-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 40px,
+      rgba(255,255,255,0.012) 40px,
+      rgba(255,255,255,0.012) 41px
+    );
+    pointer-events: none;
+  }
+
+  .zone-a { background: #060f1c; border-color: #1a3a5a; box-shadow: inset 0 0 40px rgba(0,100,200,0.07); }
+  .zone-b { background: #060f16; border-color: #1a3a40; box-shadow: inset 0 0 40px rgba(0,160,130,0.07); }
+
+  .zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .zone-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .zone-subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    opacity: 0.55;
+    margin-top: 2px;
+  }
+  .zone-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+  .badge-isolated { background: rgba(255,80,80,0.15); color: #ff8888; border: 1px solid rgba(255,80,80,0.3); }
+
+  .zone-a .zone-title { color: #5cc8f8; }
+  .zone-b .zone-title { color: #44ccaa; }
+
+  .zone-devices {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* ── LAN SUBNET BOX ── */
+  .lan-box {
+    border-radius: 6px;
+    padding: 10px 20px;
+    text-align: center;
+    width: 100%;
+    border: 1px dashed;
+    position: relative;
+    overflow: hidden;
+  }
+  .lan-box::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0%{left:-100%} 100%{left:200%} }
+
+  .lan-a { background: rgba(0,80,160,0.12); border-color: rgba(0,120,220,0.3); }
+  .lan-b { background: rgba(0,130,100,0.12); border-color: rgba(0,180,140,0.3); }
+  .lan-label { font-size: 10px; font-weight: 600; color: #aaccee; letter-spacing: 1px; margin-bottom: 2px; }
+  .lan-addr  { font-family: 'Share Tech Mono', monospace; font-size: 14px; font-weight: 600; }
+  .lan-a .lan-addr { color: #5cc8f8; }
+  .lan-b .lan-addr { color: #44ccaa; }
+
+  /* ── SVG CONNECTORS ── */
+  .conn-svg {
+    width: 100%;
+    overflow: visible;
+    display: block;
+  }
+
+  /* ── VPN TAG ── */
+  .vpn-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    background: rgba(0,200,120,0.12);
+    border: 1px solid rgba(0,200,120,0.3);
+    color: #44ccaa;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+
+  /* ── TOP ROW: WFH + Internet + Router ── */
+  .top-tier {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 32px;
+    padding: 0 20px;
+    flex-wrap: wrap;
+  }
+
+  .offline-tag {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    color: #ff5555;
+    border: 1px solid #ff333344;
+    background: rgba(255,50,50,0.08);
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  /* ── SECTION DIVIDER ── */
+  .sec-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 10px;
+    margin: 2px 0;
+  }
+  .sec-divider span {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: #1e3a5a;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+  .sec-line { flex: 1; height: 1px; background: linear-gradient(90deg, #1e3a5a, transparent); }
+  .sec-line.rev { background: linear-gradient(90deg, transparent, #1e3a5a); }
+
+  /* animated packet dots on wires */
+  .pkt-dot {
+    animation: travel 2s linear infinite;
+    fill: #00d4ff;
+    r: 3;
+  }
+  @keyframes travel {
+    0%   { opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* SCAN LINE */
+  .scan-overlay {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 999;
+    overflow: hidden;
+  }
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,212,255,0.06), transparent);
+    animation: scan-anim 6s linear infinite;
+  }
+  @keyframes scan-anim { 0%{top:0%} 100%{top:100%} }
+
+  .row2-connectors {
+    display: flex;
+    justify-content: center;
+    position: relative;
+    height: 28px;
+    width: 100%;
+  }
+</style>
+
+<div class="scan-overlay"><div class="scan-line"></div></div>
+
+<div class="diagram-wrap">
+  <div class="diagram-title">
+    <h1>SDx LAB Connectivity Diagram</h1>
+    <p>NETWORK TOPOLOGY · SECURE SEGMENTED INFRASTRUCTURE</p>
+  </div>
+
+  <div class="net-grid">
+
+    <!-- ══ TIER 1: WFH + Internet + Router ══ -->
+    <div class="tier-label">ACCESS LAYER</div>
+    <div class="tier-row top-tier">
+
+      <!-- WFH Users -->
+      <div class="device" style="align-items:center">
+        <div class="device-box dev-wfh" style="min-width:110px">
+          <div class="led green"></div>
+          <div class="device-icon">💻</div>
+          <div class="device-name">WFH Users</div>
+          <div class="device-sub">Global Protect VPN</div>
+          <div class="device-sub">+ MFA</div>
+        </div>
+        <div class="vpn-tag">ENCRYPTED TUNNEL</div>
+      </div>
+
+      <!-- Internet Cloud -->
+      <div class="cloud-box">
+        <div class="device-icon" style="font-size:26px;margin-bottom:4px">🌐</div>
+        <div class="cloud-name">INTERNET</div>
+        <div class="cloud-sub">Public Network</div>
+        <div class="led green"></div>
+      </div>
+
+      <!-- Internet Router -->
+      <div class="device">
+        <div class="device-box dev-internet" style="min-width:120px">
+          <div class="led green"></div>
+          <div class="device-icon">🔀</div>
+          <div class="device-name">Internet Router</div>
+          <div class="device-sub">Edge Gateway</div>
+        </div>
+      </div>
+
+    </div><!-- /top-tier -->
+
+    <!-- Connector: tier1 → tier2 -->
+    <div style="height:12px"></div>
+    <svg class="conn-svg" height="36" viewBox="0 0 700 36">
+      <!-- vertical from internet down -->
+      <line x1="350" y1="0" x2="350" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="350" y1="0" x2="200" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="350" y1="0" x2="500" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <!-- animated packets -->
+      <circle class="pkt-dot" cx="350" cy="0">
+        <animateMotion dur="1.4s" repeatCount="indefinite" path="M0,0 L0,36"/>
+      </circle>
+      <circle class="pkt-dot" cx="350" cy="0" style="fill:#ffaa44">
+        <animateMotion dur="1.8s" repeatCount="indefinite" begin="0.5s" path="M0,0 L-150,36"/>
+      </circle>
+      <circle class="pkt-dot" cx="350" cy="0">
+        <animateMotion dur="2s" repeatCount="indefinite" begin="0.9s" path="M0,0 L150,36"/>
+      </circle>
+    </svg>
+
+    <!-- ══ TIER 2: WAN IM Switches ══ -->
+    <div class="sec-divider"><div class="sec-line rev"></div><span>WAN SWITCHING</span><div class="sec-line"></div></div>
+    <div style="height:4px"></div>
+    <div class="tier-row" style="gap:24px">
+      <div class="device">
+        <div class="device-box dev-switch" style="min-width:140px">
+          <div class="led green"></div>
+          <div class="device-icon">🔲</div>
+          <div class="device-name">WAN IM Switch 1</div>
+          <div class="device-sub">Layer 2/3 Core</div>
+        </div>
+      </div>
+      <div class="device">
+        <div class="device-box dev-switch" style="min-width:140px">
+          <div class="led green"></div>
+          <div class="device-icon">🔲</div>
+          <div class="device-name">WAN IM Switch 2</div>
+          <div class="device-sub">Layer 2/3 Core</div>
+        </div>
+      </div>
+      <!-- Wipro Backbone (offline) -->
+      <div class="device">
+        <div class="device-box dev-offline" style="min-width:130px">
+          <div class="led red"></div>
+          <div class="device-icon">☁️</div>
+          <div class="device-name">Wipro Backbone</div>
+          <div class="device-sub">External WAN</div>
+        </div>
+        <div class="offline-tag">✕ LINK DOWN</div>
+      </div>
+    </div>
+
+    <!-- Connector → Firewalls -->
+    <svg class="conn-svg" height="36" viewBox="0 0 700 36">
+      <line x1="240" y1="0" x2="260" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="460" y1="0" x2="440" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="260" y1="18" x2="440" y2="18" stroke="#1a4a6e" stroke-width="1.5"/>
+      <circle class="pkt-dot" cx="240" cy="0">
+        <animateMotion dur="1.6s" repeatCount="indefinite" path="M0,0 L20,36"/>
+      </circle>
+      <circle class="pkt-dot" cx="460" cy="0" style="fill:#ffaa44">
+        <animateMotion dur="1.6s" repeatCount="indefinite" begin="0.4s" path="M0,0 L-20,36"/>
+      </circle>
+    </svg>
+
+    <!-- ══ TIER 3: IMG Firewalls ══ -->
+    <div class="sec-divider"><div class="sec-line rev"></div><span>PERIMETER SECURITY</span><div class="sec-line"></div></div>
+    <div style="height:4px"></div>
+    <div class="tier-row" style="gap:24px">
+      <div class="device">
+        <div class="device-box dev-firewall" style="min-width:150px">
+          <div class="led amber"></div>
+          <div class="device-icon">🛡</div>
+          <div class="device-name">IMG Firewall 1</div>
+          <div class="device-sub">Perimeter · Active</div>
+        </div>
+      </div>
+      <div class="device">
+        <div class="device-box dev-firewall" style="min-width:150px">
+          <div class="led amber"></div>
+          <div class="device-icon">🛡</div>
+          <div class="device-name">IMG Firewall 2</div>
+          <div class="device-sub">Perimeter · Standby</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Patch Panel + LAN Switch row -->
+    <svg class="conn-svg" height="36" viewBox="0 0 700 36">
+      <line x1="270" y1="0" x2="280" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="430" y1="0" x2="420" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="280" y1="18" x2="420" y2="18" stroke="#1a4a6e" stroke-width="1.5"/>
+      <circle class="pkt-dot" cx="270" cy="0">
+        <animateMotion dur="1.5s" repeatCount="indefinite" path="M0,0 L10,36"/>
+      </circle>
+      <circle class="pkt-dot" cx="430" cy="0" style="fill:#5cc8f8">
+        <animateMotion dur="1.5s" repeatCount="indefinite" begin="0.6s" path="M0,0 L-10,36"/>
+      </circle>
+    </svg>
+
+    <!-- ══ TIER 4: Patch Panels + LAN Switches ══ -->
+    <div class="sec-divider"><div class="sec-line rev"></div><span>LAN DISTRIBUTION</span><div class="sec-line"></div></div>
+    <div style="height:4px"></div>
+    <div class="tier-row" style="gap:12px; flex-wrap:wrap">
+      <div class="device">
+        <div class="device-box dev-patch" style="min-width:110px">
+          <div class="device-icon" style="font-size:14px">▦</div>
+          <div class="device-name">Patch Panel A</div>
+          <div class="device-sub">48 Port · CAT6</div>
+        </div>
+      </div>
+      <div class="device">
+        <div class="device-box dev-switch" style="min-width:130px">
+          <div class="led green"></div>
+          <div class="device-icon">🔲</div>
+          <div class="device-name">LAN IM Switch 1</div>
+          <div class="device-sub">Access · Managed</div>
+        </div>
+      </div>
+      <div class="device">
+        <div class="device-box dev-switch" style="min-width:130px">
+          <div class="led green"></div>
+          <div class="device-icon">🔲</div>
+          <div class="device-name">LAN IM Switch 2</div>
+          <div class="device-sub">Access · Managed</div>
+        </div>
+      </div>
+      <div class="device">
+        <div class="device-box dev-patch" style="min-width:110px">
+          <div class="device-icon" style="font-size:14px">▦</div>
+          <div class="device-name">Patch Panel B</div>
+          <div class="device-sub">48 Port · CAT6</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector → SDx Zones -->
+    <svg class="conn-svg" height="36" viewBox="0 0 700 36">
+      <line x1="175" y1="0" x2="175" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="175" y1="18" x2="80" y2="36" stroke="#1a4a6e" stroke-width="1.5"/>
+      <line x1="525" y1="0" x2="525" y2="36" stroke="#1a3a50" stroke-width="1.5"/>
+      <line x1="525" y1="18" x2="620" y2="36" stroke="#1a3a50" stroke-width="1.5"/>
+      <circle class="pkt-dot" style="fill:#5cc8f8" cx="175" cy="0">
+        <animateMotion dur="1.4s" repeatCount="indefinite" path="M0,0 L-95,36"/>
+      </circle>
+      <circle class="pkt-dot" style="fill:#44ccaa" cx="525" cy="0">
+        <animateMotion dur="1.4s" repeatCount="indefinite" begin="0.5s" path="M0,0 L95,36"/>
+      </circle>
+    </svg>
+
+    <!-- ══ TIER 5: SDx Managed Zones ══ -->
+    <div class="sec-divider"><div class="sec-line rev"></div><span>SDx MANAGED ZONES · ISOLATED</span><div class="sec-line"></div></div>
+    <div style="height:4px"></div>
+
+    <!-- Dark Fiber interconnect banner -->
+    <div style="display:flex;align-items:center;gap:0;margin:6px 0 2px;position:relative">
+      <div style="flex:1;height:2px;background:linear-gradient(90deg,transparent,#1a1a2a,#2a2a4a,#1a1a2a 40%)"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 16px;background:#0a0a16;border:1px solid #2a2a4a;border-radius:20px;white-space:nowrap;position:relative;z-index:1">
+        <span style="font-size:13px">🔗</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:#5a5a8a;text-transform:uppercase">Dark Fiber Interconnect</span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#3a6a8a">10Gbps · Private Leased Line</span>
+        <span style="width:6px;height:6px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;animation:blink 2.1s ease-in-out infinite;display:inline-block"></span>
+      </div>
+      <div style="flex:1;height:2px;background:linear-gradient(90deg,#1a1a2a 60%,#2a2a4a,#1a1a2a,transparent)"></div>
+      <!-- animated fiber pulse -->
+    </div>
+    <!-- animated dark fiber line overlay -->
+    <svg style="display:block;width:100%;height:6px;margin:-3px 0;overflow:visible" viewBox="0 0 700 6" preserveAspectRatio="none">
+      <line x1="0" y1="3" x2="700" y2="3" stroke="#1e1e3a" stroke-width="1" stroke-dasharray="6,6"/>
+      <circle r="2.5" fill="#8888ff" opacity="0.8">
+        <animateMotion dur="2.2s" repeatCount="indefinite" path="M0,3 L700,3"/>
+      </circle>
+      <circle r="2.5" fill="#8888ff" opacity="0.8">
+        <animateMotion dur="2.2s" repeatCount="indefinite" begin="1.1s" path="M700,3 L0,3"/>
+      </circle>
+    </svg>
+
+    <div class="zones-row">
+
+      <!-- ZONE A: S5F10 B Wing - Disaster Recovery -->
+      <div class="sdx-zone zone-a">
+        <div class="zone-header">
+          <div>
+            <div class="zone-title">S5F10 · B Wing &nbsp;<span style="font-size:9px;color:#5cc8f880;font-weight:400;letter-spacing:1px">DISASTER RECOVERY</span></div>
+            <div class="zone-subtitle">Disaster Recovery Site · Account Isolated</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div class="zone-badge badge-isolated">ISOLATED</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 7px;border-radius:3px;background:rgba(100,80,255,.12);color:#9988ff;border:1px solid rgba(100,80,255,.25);letter-spacing:1px">DR SITE</div>
+          </div>
+        </div>
+        <div class="zone-devices">
+          <div class="device-box dev-patch" style="width:100%; text-align:center; min-width:unset">
+            <div class="device-name" style="font-size:10px">▦ Patch Panel</div>
+            <div class="device-sub">Internal Distribution</div>
+          </div>
+          <svg width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="#1a4a6e" stroke-width="1.5"/></svg>
+          <div class="device-box dev-asa" style="width:100%; text-align:center; min-width:unset; position:relative">
+            <div class="led green"></div>
+            <div class="device-icon">🔒</div>
+            <div class="device-name">Cisco ASA 5500</div>
+            <div class="device-sub">LAB ENT Core Switch</div>
+            <div class="device-sub" style="color:#6a4aaa">Account Managed</div>
+          </div>
+          <svg width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="#1a4a6e" stroke-width="1.5"/></svg>
+          <div class="lan-box lan-a">
+            <div class="lan-label">SDx LAN SEGMENT</div>
+            <div class="lan-addr">172.16.0.0 / 16</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ZONE B: S3F5 A Wing - Datacenter -->
+      <div class="sdx-zone zone-b">
+        <div class="zone-header">
+          <div>
+            <div class="zone-title">S3F5 · A Wing &nbsp;<span style="font-size:9px;color:#44ccaa80;font-weight:400;letter-spacing:1px">DATACENTER</span></div>
+            <div class="zone-subtitle">Primary Datacenter · Account Isolated</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div class="zone-badge badge-isolated">ISOLATED</div>
+            <div style="font-family:'Share Tech Mono',monospace;font-size:8px;padding:2px 7px;border-radius:3px;background:rgba(0,200,140,.1);color:#44ccaa;border:1px solid rgba(0,200,140,.25);letter-spacing:1px">PRIMARY DC</div>
+          </div>
+        </div>
+        <div class="zone-devices">
+          <div class="device-box dev-patch" style="width:100%; text-align:center; min-width:unset">
+            <div class="device-name" style="font-size:10px">▦ Patch Panel</div>
+            <div class="device-sub">Internal Distribution</div>
+          </div>
+          <svg width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="#1a3a40" stroke-width="1.5"/></svg>
+          <div class="device-box dev-asa" style="width:100%; text-align:center; min-width:unset; position:relative">
+            <div class="led green"></div>
+            <div class="device-icon">🔒</div>
+            <div class="device-name">Cisco ASA 5500</div>
+            <div class="device-sub">LAB ENT Core Switch</div>
+            <div class="device-sub" style="color:#6a4aaa">Account Managed</div>
+          </div>
+          <svg width="2" height="16"><line x1="1" y1="0" x2="1" y2="16" stroke="#1a3a40" stroke-width="1.5"/></svg>
+          <div class="lan-box lan-b">
+            <div class="lan-label">SDx LAN SEGMENT</div>
+            <div class="lan-addr">172.17.0.0 / 16</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /zones-row -->
+
+    <!-- ── LEGEND ── -->
+    <div style="margin-top:18px; padding: 10px 14px; background: #0a1220; border: 1px solid #1a2a3a; border-radius:6px; display:flex; gap:20px; flex-wrap:wrap; justify-content:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;display:inline-block"></span>
+        <span style="font-size:10px;font-family:'Share Tech Mono',monospace;color:#4a6a8a">ACTIVE / ONLINE</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#ffb300;box-shadow:0 0 6px #ffb300;display:inline-block"></span>
+        <span style="font-size:10px;font-family:'Share Tech Mono',monospace;color:#4a6a8a">FILTERING / ACTIVE INSPECTION</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#ff3d3d;box-shadow:0 0 6px #ff3d3d;display:inline-block"></span>
+        <span style="font-size:10px;font-family:'Share Tech Mono',monospace;color:#4a6a8a">LINK DOWN</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:22px;height:2px;background:linear-gradient(90deg,#1a4a6e,#00d4ff);display:inline-block"></span>
+        <span style="font-size:10px;font-family:'Share Tech Mono',monospace;color:#4a6a8a">ACTIVE TRAFFIC FLOW</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:22px;height:2px;border-top:2px dashed #3a3a6a;display:inline-block"></span>
+        <span style="font-size:10px;font-family:'Share Tech Mono',monospace;color:#4a6a8a">DARK FIBER · DC ↔ DR</span>
+      </div>
+    </div>
+
+  </div><!-- /net-grid -->
+</div>
+
+</body>
+</html>

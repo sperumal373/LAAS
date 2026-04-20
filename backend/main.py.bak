@@ -1,0 +1,695 @@
+from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from contextlib import asynccontextmanager
+from pydantic import BaseModel
+from pathlib import Path
+from dotenv import load_dotenv
+import os, io, csv, threading, time, logging, json, secrets
+
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("caas")
+
+from vmware_client import get_vcenter_list, get_all_data, get_alerts, vm_power_action, \
+                          vm_snapshot, vm_delete_snapshot, vm_clone, vm_migrate, \
+                          get_vc_resources, get_vc_templates, apply_guest_customization, \
+                          provision_vm, vm_reconfig, vm_host_action
+from auth import authenticate, check_ad_connectivity, search_ad_users
+from db   import (init_db, upsert_user, get_user, list_users, update_user_role,
+                  create_vm_request, get_vm_request, list_vm_requests,
+                  review_vm_request, update_request_status, audit, list_audit)
+
+# ── Cache ──────────────────────────────────────────────────────────────────────
+_cache   = {"data":None,"alerts":[],"last_ok":None,"fetching":False,"error":None}
+_lock    = threading.Lock()
+CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS","120"))
+
+def _do_fetch():
+    with _lock:
+        if _cache["fetching"]: return
+        _cache["fetching"] = True
+    try:
+        data = get_all_data()
+        alrt = get_alerts(data["hosts"], data["datastores"])
+        with _lock:
+            _cache["data"]=data; _cache["alerts"]=alrt
+            _cache["last_ok"]=time.time(); _cache["error"]=None
+        log.info("Cache refresh done — %d VMs", len(data.get("vms",[])))
+    except Exception as e:
+        with _lock: _cache["error"]=str(e)
+        log.error("Cache refresh failed: %s", e)
+    finally:
+        with _lock: _cache["fetching"]=False
+
+def _background_loop():
+    _do_fetch()
+    while True:
+        time.sleep(CACHE_TTL); _do_fetch()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    threading.Thread(target=_background_loop, daemon=True).start()
+    log.info("CaaS Dashboard v5.0 started")
+    yield
+
+# ── App ────────────────────────────────────────────────────────────────────────
+app = FastAPI(title="CaaS Dashboard API", version="5.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
+
+# ── Simple token store (in-memory, TTL 8h) ────────────────────────────────────
+_tokens: dict[str, dict] = {}  # token -> {username, role, display_name, exp}
+TOKEN_TTL = 8 * 3600
+security  = HTTPBearer(auto_error=False)
+
+def _make_token(user: dict) -> str:
+    tok = secrets.token_hex(32)
+    _tokens[tok] = {**user, "exp": time.time() + TOKEN_TTL}
+    return tok
+
+def _resolve_token(tok: str) -> dict | None:
+    t = _tokens.get(tok)
+    if not t: return None
+    if time.time() > t["exp"]:
+        del _tokens[tok]; return None
+    return t
+
+def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    if not creds:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    user = _resolve_token(creds.credentials)
+    if not user:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    return user
+
+def require_role(*roles):
+    def dep(u=Depends(get_current_user)):
+        if u["role"] not in roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                detail=f"Role '{u['role']}' not allowed. Required: {roles}")
+        return u
+    return dep
+
+def _get_cached():
+    with _lock: data=_cache["data"]; last_ok=_cache["last_ok"]; fetching=_cache["fetching"]; err=_cache["error"]
+    stale = last_ok is None or (time.time()-last_ok) > CACHE_TTL
+    if stale and not fetching:
+        threading.Thread(target=_do_fetch, daemon=True).start()
+    return data, err
+
+def _require_data():
+    data, err = _get_cached()
+    if data is None:
+        for _ in range(10):
+            time.sleep(0.5); data,err=_get_cached()
+            if data: break
+    if data is None:
+        raise HTTPException(503, detail=f"Data loading… {err or ''}")
+    return data
+
+def _filter(rows, vcenter_id):
+    if vcenter_id and vcenter_id != "all":
+        return [r for r in rows if r.get("vcenter_id")==vcenter_id]
+    return rows
+
+def _csv(rows, fields, filename):
+    buf=io.StringIO()
+    w=csv.DictWriter(buf,fieldnames=fields,extrasaction="ignore")
+    w.writeheader(); w.writerows(rows); buf.seek(0)
+    return StreamingResponse(io.BytesIO(buf.getvalue().encode()),
+        media_type="text/csv",
+        headers={"Content-Disposition":f"attachment; filename={filename}"})
+
+# ── Auth endpoints ─────────────────────────────────────────────────────────────
+class LoginReq(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/login")
+def login(req: LoginReq, request: Request):
+    ip = request.client.host if request.client else ""
+    user = authenticate(req.username, req.password)
+    if not user:
+        audit(req.username, "LOGIN_FAIL", detail="Bad credentials", ip=ip, result="fail")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    # Upsert into DB
+    db_user = upsert_user(user["username"], user["display_name"],
+                          user.get("email",""), user["role"], user["auth_source"])
+    tok = _make_token({**user, "user_id": db_user["id"] if db_user else 0})
+    audit(user["username"], "LOGIN", role=user["role"], ip=ip)
+    return {"token": tok, "user": {
+        "username":     user["username"],
+        "display_name": user["display_name"],
+        "email":        user.get("email",""),
+        "role":         user["role"],
+        "auth_source":  user["auth_source"],
+    }}
+
+@app.post("/api/auth/logout")
+def logout(u=Depends(get_current_user)):
+    # Invalidate token
+    for tok, data in list(_tokens.items()):
+        if data.get("username") == u["username"]:
+            del _tokens[tok]; break
+    audit(u["username"], "LOGOUT", role=u["role"])
+    return {"status": "ok"}
+
+@app.get("/api/auth/me")
+def me(u=Depends(get_current_user)):
+    return u
+
+@app.get("/api/auth/ad-status")
+def ad_status(u=Depends(require_role("admin"))):
+    return check_ad_connectivity()
+
+# ── Health ─────────────────────────────────────────────────────────────────────
+@app.get("/health")
+def health():
+    with _lock:
+        last=_cache["last_ok"]; fetch=_cache["fetching"]; err=_cache["error"]
+    return {"status":"ok","version":"5.0.0",
+            "cache_age":round(time.time()-last,0) if last else None,
+            "fetching":fetch,"error":err,"cache_ttl":CACHE_TTL}
+
+@app.get("/api/cache/status")
+def cache_status(u=Depends(get_current_user)):
+    with _lock: last=_cache["last_ok"]; fetch=_cache["fetching"]; err=_cache["error"]; data=_cache["data"]
+    return {"last_refreshed":time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(last)) if last else None,
+            "cache_age_seconds":round(time.time()-last,0) if last else None,
+            "is_fetching":fetch,"error":err,
+            "vms_cached":len(data["vms"]) if data else 0,
+            "hosts_cached":len(data["hosts"]) if data else 0}
+
+@app.post("/api/cache/refresh")
+def cache_refresh(u=Depends(require_role("admin","operator"))):
+    with _lock: already=_cache["fetching"]
+    if not already: threading.Thread(target=_do_fetch,daemon=True).start()
+    return {"status":"refresh started" if not already else "already refreshing"}
+
+# ── vCenters ───────────────────────────────────────────────────────────────────
+@app.get("/api/vcenters")
+def vcenters(u=Depends(get_current_user)):
+    return {"vcenters": get_vcenter_list()}
+
+# ── VMware data ────────────────────────────────────────────────────────────────
+def _agg(summs):
+    from functools import reduce
+    def a(x,y):
+        return {"vcenter_id":"all","vcenter_name":"All vCenters","vcenter_host":"all","status":"ok",
+                "total_hosts":x["total_hosts"]+y["total_hosts"],
+                "connected_hosts":x["connected_hosts"]+y["connected_hosts"],
+                "total_vms":x["total_vms"]+y["total_vms"],
+                "running_vms":x["running_vms"]+y["running_vms"],
+                "stopped_vms":x["stopped_vms"]+y["stopped_vms"],
+                "cpu":{"total_mhz":x["cpu"]["total_mhz"]+y["cpu"]["total_mhz"],
+                       "used_mhz":x["cpu"]["used_mhz"]+y["cpu"]["used_mhz"],
+                       "free_mhz":x["cpu"]["free_mhz"]+y["cpu"]["free_mhz"],"free_pct":0},
+                "ram":{"total_gb":round(x["ram"]["total_gb"]+y["ram"]["total_gb"],1),
+                       "used_gb":round(x["ram"]["used_gb"]+y["ram"]["used_gb"],1),
+                       "free_gb":round(x["ram"]["free_gb"]+y["ram"]["free_gb"],1),"free_pct":0},
+                "storage":{"total_gb":round(x["storage"]["total_gb"]+y["storage"]["total_gb"],1),
+                           "free_gb":round(x["storage"]["free_gb"]+y["storage"]["free_gb"],1),
+                           "used_gb":round(x["storage"]["used_gb"]+y["storage"]["used_gb"],1),"free_pct":0}}
+    r=reduce(a,summs)
+    for k,tf,ff in [("cpu","total_mhz","free_mhz"),("ram","total_gb","free_gb"),("storage","total_gb","free_gb")]:
+        t=r[k][tf]; f=r[k][ff]; r[k]["free_pct"]=round((f/t)*100,1) if t else 0
+    return r
+
+@app.get("/api/vmware/summary")
+def summary(vcenter_id:str=None, u=Depends(get_current_user)):
+    data=_require_data(); summs=data["summaries"]
+    if vcenter_id and vcenter_id!="all": summs=[s for s in summs if s["vcenter_id"]==vcenter_id]
+    if not summs: raise HTTPException(404,"No data")
+    return summs[0] if len(summs)==1 else _agg(summs)
+
+@app.get("/api/vmware/vms")
+def vms(vcenter_id:str=None, u=Depends(get_current_user)):
+    rows=_filter(_require_data()["vms"],vcenter_id); return {"vms":rows,"count":len(rows)}
+
+@app.get("/api/vmware/hosts")
+def hosts(vcenter_id:str=None, u=Depends(get_current_user)):
+    rows=_filter(_require_data()["hosts"],vcenter_id); return {"hosts":rows,"count":len(rows)}
+
+@app.get("/api/vmware/datastores")
+def datastores(vcenter_id:str=None, u=Depends(get_current_user)):
+    rows=_filter(_require_data()["datastores"],vcenter_id); return {"datastores":rows,"count":len(rows)}
+
+@app.get("/api/vmware/networks")
+def networks(vcenter_id:str=None, u=Depends(get_current_user)):
+    rows=_filter(_require_data()["networks"],vcenter_id); return {"networks":rows,"count":len(rows)}
+
+@app.get("/api/vmware/snapshots")
+def snapshots(vcenter_id:str=None, u=Depends(get_current_user)):
+    rows=_filter(_require_data()["snapshots"],vcenter_id); return {"snapshots":rows,"count":len(rows)}
+
+@app.get("/api/alerts")
+def alerts(vcenter_id:str=None, u=Depends(get_current_user)):
+    with _lock: rows=list(_cache["alerts"])
+    if vcenter_id and vcenter_id!="all": rows=[r for r in rows if r.get("vcenter_id") in (vcenter_id,"all")]
+    return {"alerts":rows,"count":len(rows)}
+
+# ── VM Actions ─────────────────────────────────────────────────────────────────
+class PowerReq(BaseModel):
+    vcenter_id:str; vm_name:str; action:str
+
+class SnapReq(BaseModel):
+    vcenter_id:str; vm_name:str; snap_name:str
+    description:str=""; memory:bool=False; quiesce:bool=False
+
+class CloneReq(BaseModel):
+    vcenter_id:str; vm_name:str; clone_name:str
+    dest_host:str=None; dest_datastore:str=None; dest_vcenter_id:str=None; power_on:bool=False
+
+class MigrateReq(BaseModel):
+    vcenter_id:str; vm_name:str
+    dest_host:str=None; dest_datastore:str=None; dest_vcenter_id:str=None
+
+def _action_guard(u, allowed=("admin","operator")):
+    if u["role"] not in allowed:
+        raise HTTPException(403, detail="Insufficient permissions for VM actions")
+
+@app.post("/api/vmware/power")
+def vm_power(req:PowerReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    if req.action not in ("start","stop","restart"):
+        raise HTTPException(400, detail="action must be start|stop|restart")
+    result = vm_power_action(req.vcenter_id, req.vm_name, req.action)
+    audit(u["username"],"VM_POWER",target=req.vm_name,
+          detail=f"action={req.action} vc={req.vcenter_id}",
+          role=u["role"], result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+@app.post("/api/vmware/snapshot")
+def create_snapshot(req:SnapReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    result = vm_snapshot(req.vcenter_id,req.vm_name,req.snap_name,req.description,req.memory,req.quiesce)
+    audit(u["username"],"VM_SNAPSHOT",target=req.vm_name,
+          detail=f"snap={req.snap_name} vc={req.vcenter_id}",role=u["role"],
+          result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    return result
+
+@app.post("/api/vmware/clone")
+def clone_vm(req:CloneReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    result = vm_clone(req.vcenter_id,req.vm_name,req.clone_name,
+                      req.dest_host,req.dest_datastore,req.dest_vcenter_id,req.power_on)
+    audit(u["username"],"VM_CLONE",target=req.vm_name,
+          detail=f"clone={req.clone_name}",role=u["role"],result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+@app.post("/api/vmware/migrate")
+def migrate_vm(req:MigrateReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    result = vm_migrate(req.vcenter_id,req.vm_name,req.dest_host,req.dest_datastore,req.dest_vcenter_id)
+    audit(u["username"],"VM_MIGRATE",target=req.vm_name,
+          detail=f"dest_host={req.dest_host} dest_vc={req.dest_vcenter_id}",
+          role=u["role"],result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+@app.get("/api/vmware/resources/{vcenter_id}")
+def vc_resources(vcenter_id:str, u=Depends(get_current_user)):
+    return get_vc_resources(vcenter_id)
+
+@app.get("/api/vmware/templates/{vcenter_id}")
+def vc_templates(vcenter_id:str, u=Depends(get_current_user)):
+    return get_vc_templates(vcenter_id)
+
+# ── Delete Snapshot ────────────────────────────────────────────────────────────
+class SnapDeleteReq(BaseModel):
+    vcenter_id:str; vm_name:str; snap_name:str
+
+@app.post("/api/vmware/snapshot/delete")
+def delete_snapshot_ep(req:SnapDeleteReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    result = vm_delete_snapshot(req.vcenter_id, req.vm_name, req.snap_name)
+    audit(u["username"],"VM_SNAPSHOT_DELETE",target=req.vm_name,
+          detail=f"snap={req.snap_name}",role=u["role"],
+          result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+# ── VM Reconfig ────────────────────────────────────────────────────────────────
+class ReconfigReq(BaseModel):
+    vcenter_id:str; vm_name:str; cpu:int; ram_gb:int; disk_gb:int
+
+@app.post("/api/vmware/reconfig")
+def reconfig_vm_ep(req:ReconfigReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    result = vm_reconfig(req.vcenter_id, req.vm_name, req.cpu, req.ram_gb, req.disk_gb)
+    audit(u["username"],"VM_RECONFIG",target=req.vm_name,
+          detail=f"cpu={req.cpu} ram={req.ram_gb}GB disk={req.disk_gb}GB",
+          role=u["role"],result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+# ── Bulk VM Power ──────────────────────────────────────────────────────────────
+class BulkVMItem(BaseModel):
+    vcenter_id:str; vm_name:str
+
+class BulkPowerReq(BaseModel):
+    vms: list[BulkVMItem]; action:str
+
+@app.post("/api/vmware/bulk-power")
+def bulk_power(req:BulkPowerReq, u=Depends(get_current_user)):
+    _action_guard(u)
+    if req.action not in ("start","stop","restart"):
+        raise HTTPException(400, detail="action must be start|stop|restart")
+    succeeded=0; failed=0; errors=[]
+    for item in req.vms:
+        r = vm_power_action(item.vcenter_id, item.vm_name, req.action)
+        if r["success"]: succeeded+=1
+        else: failed+=1; errors.append(f"{item.vm_name}: {r['message']}")
+    audit(u["username"],"VM_BULK_POWER",
+          detail=f"action={req.action} total={len(req.vms)} ok={succeeded} fail={failed}",
+          role=u["role"],result="ok" if failed==0 else "fail")
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return {"succeeded":succeeded,"failed":failed,"errors":errors}
+
+# ── Host Actions ───────────────────────────────────────────────────────────────
+class HostActionReq(BaseModel):
+    vcenter_id:str; host_name:str; action:str
+
+class BulkHostItem(BaseModel):
+    vcenter_id:str; host_name:str
+
+class BulkHostReq(BaseModel):
+    hosts: list[BulkHostItem]; action:str
+
+@app.post("/api/vmware/host-action")
+def host_action_ep(req:HostActionReq, u=Depends(require_role("admin"))):
+    if req.action not in ("reboot","shutdown","maintenance","exit_maintenance"):
+        raise HTTPException(400, detail="Invalid host action")
+    result = vm_host_action(req.vcenter_id, req.host_name, req.action)
+    audit(u["username"],"HOST_ACTION",target=req.host_name,
+          detail=f"action={req.action}",role=u["role"],
+          result="ok" if result["success"] else "fail")
+    if not result["success"]: raise HTTPException(500, detail=result["message"])
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return result
+
+@app.post("/api/vmware/bulk-host-action")
+def bulk_host_action_ep(req:BulkHostReq, u=Depends(require_role("admin"))):
+    if req.action not in ("reboot","shutdown","maintenance","exit_maintenance"):
+        raise HTTPException(400, detail="Invalid host action")
+    succeeded=0; failed=0
+    for item in req.hosts:
+        r = vm_host_action(item.vcenter_id, item.host_name, req.action)
+        if r["success"]: succeeded+=1
+        else: failed+=1
+    audit(u["username"],"HOST_BULK_ACTION",
+          detail=f"action={req.action} total={len(req.hosts)} ok={succeeded} fail={failed}",
+          role=u["role"],result="ok" if failed==0 else "fail")
+    threading.Thread(target=_do_fetch,daemon=True).start()
+    return {"succeeded":succeeded,"failed":failed}
+
+# ── VM Requests ────────────────────────────────────────────────────────────────
+class VMRequestCreate(BaseModel):
+    vcenter_id:  str
+    vm_name:     str
+    cpu:         int
+    ram_gb:      int
+    disk_gb:     int
+    os_template: str = "custom"   # optional — admin can assign later
+    host:        str = ""
+    datastore:   str = ""
+    network:     str = ""
+    notes:       str = ""
+    # IP / Guest Customization
+    ip_mode:     str = "dhcp"     # dhcp | static
+    ip_address:  str = ""
+    subnet_mask: str = "255.255.255.0"
+    gateway:     str = ""
+    dns1:        str = ""
+    dns2:        str = ""
+    hostname:    str = ""
+    domain:      str = ""
+
+class VMRequestReview(BaseModel):
+    decision:    str          # approved | declined
+    admin_notes: str = ""
+    overrides:   dict = {}    # optional resource modifications
+
+@app.post("/api/requests")
+def submit_request(body: VMRequestCreate, u=Depends(get_current_user)):
+    data = body.dict(); data["requester"] = u["username"]
+    req  = create_vm_request(data)
+    audit(u["username"],"VM_REQUEST_SUBMIT",target=req["req_number"],
+          detail=f"vm={body.vm_name} cpu={body.cpu} ram={body.ram_gb}GB",role=u["role"])
+    return req
+
+@app.get("/api/requests")
+def get_requests(u=Depends(get_current_user)):
+    # Admins/operators see all; requesters see only their own
+    if u["role"] in ("admin","operator"):
+        return {"requests": list_vm_requests()}
+    return {"requests": list_vm_requests(requester=u["username"])}
+
+@app.get("/api/requests/pending")
+def get_pending(u=Depends(require_role("admin","operator"))):
+    return {"requests": list_vm_requests(status="pending")}
+
+@app.post("/api/requests/{req_number}/review")
+def review_request(req_number:str, body:VMRequestReview, u=Depends(require_role("admin"))):
+    if body.decision not in ("approved","declined"):
+        raise HTTPException(400, detail="decision must be approved or declined")
+    req = review_vm_request(req_number, u["username"], body.decision,
+                            body.admin_notes, body.overrides)
+    if not req: raise HTTPException(404, detail="Request not found")
+    audit(u["username"],f"VM_REQUEST_{body.decision.upper()}",
+          target=req_number,detail=body.admin_notes,role=u["role"])
+
+    # Auto-provision if approved
+    if body.decision == "approved":
+        def _provision():
+            update_request_status(req_number, "provisioning")
+            # Use approved overrides if set, else original values
+            prov_data = {
+                "vcenter_id": req["vcenter_id"],
+                "vm_name":    req["vm_name"],
+                "cpu":        req["approved_cpu"]     or req["cpu"],
+                "ram_gb":     req["approved_ram_gb"]  or req["ram_gb"],
+                "disk_gb":    req["approved_disk_gb"] or req["disk_gb"],
+                "os_template":req["os_template"] or "custom",
+                "host":       (req["approved_host"]    or req["host"])    or None,
+                "datastore":  (req["approved_ds"]      or req["datastore"]) or None,
+                "network":    (req["approved_network"] or req["network"])  or None,
+            }
+            result = provision_vm(prov_data)
+            if result["success"]:
+                # Apply guest customization if IP config was requested
+                ip_mode = req.get("ip_mode","dhcp")
+                has_ip  = ip_mode == "static" and req.get("ip_address")
+                has_dns = req.get("dns1")
+                if has_ip or has_dns or ip_mode == "static":
+                    ip_config = {
+                        "mode":        ip_mode,
+                        "ip_address":  req.get("ip_address",""),
+                        "subnet_mask": req.get("subnet_mask","255.255.255.0"),
+                        "gateway":     req.get("gateway",""),
+                        "dns1":        req.get("dns1",""),
+                        "dns2":        req.get("dns2",""),
+                        "hostname":    req.get("hostname","") or req["vm_name"],
+                        "domain":      req.get("domain",""),
+                    }
+                    cust_result = apply_guest_customization(
+                        req["vcenter_id"], req["vm_name"], ip_config)
+                    log.info(f"[provision] customization: {cust_result}")
+                    if not cust_result["success"]:
+                        result["message"] += f" (IP customization warning: {cust_result['message']})"
+            new_status = "done" if result["success"] else "failed"
+            update_request_status(req_number, new_status)
+            audit(u["username"],"VM_PROVISIONED",target=req_number,
+                  detail=result["message"],role=u["role"],
+                  result="ok" if result["success"] else "fail")
+            _do_fetch()
+        threading.Thread(target=_provision, daemon=True).start()
+
+    return req
+
+# ── Users / Admin ──────────────────────────────────────────────────────────────
+@app.get("/api/users")
+def get_users(u=Depends(require_role("admin"))):
+    return {"users": list_users()}
+
+@app.get("/api/users/search")
+def search_users(q: str = "", current_user=Depends(require_role("admin"))):
+    """Search AD directory for users matching query (2+ chars), merged with local DB."""
+    if len(q.strip()) < 2:
+        return {"users": []}
+    # 1. Search AD live
+    ad_results = search_ad_users(q.strip(), limit=15)
+    # 2. Also filter local DB users
+    all_local = list_users()
+    ql = q.strip().lower()
+    local_matches = [
+        row for row in all_local
+        if ql in (row.get("username") or "").lower()
+        or ql in (row.get("display_name") or "").lower()
+        or ql in (row.get("email") or "").lower()
+    ]
+    # 3. Merge: AD first (richer data), then local-only additions
+    seen = {r["username"] for r in ad_results}
+    for row in local_matches:
+        if row["username"] not in seen:
+            ad_results.append(row)
+            seen.add(row["username"])
+    return {"users": ad_results[:15]}
+
+class RoleUpdate(BaseModel):
+    role: str
+
+@app.patch("/api/users/{username}/role")
+def update_role(username:str, body:RoleUpdate, u=Depends(require_role("admin"))):
+    if body.role not in ("admin","operator","viewer","requester"):
+        raise HTTPException(400, detail="Invalid role")
+    update_user_role(username, body.role)
+    audit(u["username"],"USER_ROLE_UPDATE",target=username,
+          detail=f"new_role={body.role}",role=u["role"])
+    return {"status":"ok","username":username,"role":body.role}
+
+# ── Audit Log ──────────────────────────────────────────────────────────────────
+@app.get("/api/audit")
+def get_audit(limit:int=200, u=Depends(require_role("admin","operator"))):
+    return {"logs": list_audit(limit=limit)}
+
+@app.get("/api/audit/me")
+def get_my_audit(u=Depends(get_current_user)):
+    return {"logs": list_audit(limit=100, username=u["username"])}
+
+# ── CSV exports ────────────────────────────────────────────────────────────────
+@app.get("/api/export/vms")
+def export_vms(vcenter_id:str=None, u=Depends(get_current_user)):
+    return _csv(_filter(_require_data()["vms"],vcenter_id),
+        ["vcenter_name","name","status","cpu","ram_gb","disk_gb","host","guest_os","snapshot_count","ip"],
+        "vms_export.csv")
+
+@app.get("/api/export/hosts")
+def export_hosts(vcenter_id:str=None, u=Depends(get_current_user)):
+    return _csv(_filter(_require_data()["hosts"],vcenter_id),
+        ["vcenter_name","name","status","cpu_cores","cpu_total_mhz","cpu_used_mhz","cpu_free_pct",
+         "ram_total_gb","ram_used_gb","ram_free_gb"],"hosts_export.csv")
+
+@app.get("/api/export/datastores")
+def export_datastores(vcenter_id:str=None, u=Depends(get_current_user)):
+    return _csv(_filter(_require_data()["datastores"],vcenter_id),
+        ["vcenter_name","name","type","total_gb","used_gb","free_gb","used_pct","accessible"],
+        "datastores_export.csv")
+
+# ── VM Delete from Disk (Admin only) ──────────────────────────────────────────
+class VMDeleteReq(BaseModel):
+    vcenter_id: str
+    vm_name: str
+
+@app.post("/api/vmware/delete")
+def delete_vm_from_disk(req: VMDeleteReq, u=Depends(require_role("admin"))):
+    from vmware_client import vm_delete_from_disk
+    r = vm_delete_from_disk(req.vcenter_id, req.vm_name)
+    if not r.get("success"):
+        raise HTTPException(400, detail=r.get("message","Delete failed"))
+    audit(u["username"], "VM_DELETE_DISK", target=req.vm_name,
+          detail=f"vcenter={req.vcenter_id}", role=u["role"])
+    _do_fetch()
+    return r
+
+# ── VM Snapshots for a single VM ──────────────────────────────────────────────
+@app.get("/api/vmware/vm-snapshots")
+def get_vm_snapshots(vcenter_id: str, vm_name: str, u=Depends(get_current_user)):
+    data = _require_data()
+    snaps = [s for s in data.get("snapshots", [])
+             if s["vcenter_id"] == vcenter_id and s["vm_name"] == vm_name]
+    return {"snapshots": snaps}
+
+# ── Admin: vCenter Management ─────────────────────────────────────────────────
+class VCenterAddReq(BaseModel):
+    host: str
+    name: str
+    user: str
+    password: str
+    port: int = 443
+
+class VCenterDeleteReq(BaseModel):
+    vcenter_id: str
+
+@app.post("/api/admin/vcenters")
+def admin_add_vcenter(req: VCenterAddReq, u=Depends(require_role("admin"))):
+    from vmware_client import admin_add_vcenter as _add
+    r = _add(req.host, req.name, req.user, req.password, req.port)
+    if not r.get("success"):
+        raise HTTPException(400, detail=r.get("message","Failed to add vCenter"))
+    audit(u["username"], "VCENTER_ADD", target=req.host,
+          detail=f"name={req.name}", role=u["role"])
+    return r
+
+@app.post("/api/admin/vcenters/delete")
+def admin_delete_vcenter(req: VCenterDeleteReq, u=Depends(require_role("admin"))):
+    from vmware_client import admin_delete_vcenter as _del
+    r = _del(req.vcenter_id)
+    if not r.get("success"):
+        raise HTTPException(400, detail=r.get("message","Failed to delete vCenter"))
+    audit(u["username"], "VCENTER_DELETE", target=req.vcenter_id, role=u["role"])
+    return r
+
+@app.post("/api/admin/vcenters/test")
+def admin_test_vcenter(req: VCenterAddReq, u=Depends(require_role("admin"))):
+    from vmware_client import test_vcenter_connection
+    r = test_vcenter_connection(req.host, req.user, req.password, req.port)
+    return r
+
+@app.post("/api/admin/vcenters/reload")
+def admin_reload_vcenters(u=Depends(require_role("admin"))):
+    from vmware_client import reload_vcenters
+    reload_vcenters()
+    _do_fetch()
+    return {"status": "ok", "message": "vCenters reloaded from .env"}
+
+# ── Admin: Pricing Config ─────────────────────────────────────────────────────
+_PRICING_FILE = Path(__file__).parent / "pricing.json"
+_DEFAULT_PRICING = {
+    "cpu_per_core_month_inr": 500,
+    "ram_per_gb_month_inr":   200,
+    "disk_per_gb_month_inr":  8,
+    "usd_rate": 83.5,
+    "updated_by": "system",
+    "updated_at": ""
+}
+
+def _load_pricing():
+    if _PRICING_FILE.exists():
+        try:
+            return json.loads(_PRICING_FILE.read_text())
+        except Exception:
+            pass
+    return _DEFAULT_PRICING.copy()
+
+@app.get("/api/admin/pricing")
+def get_pricing(u=Depends(get_current_user)):
+    return _load_pricing()
+
+class PricingUpdate(BaseModel):
+    cpu_per_core_month_inr: float
+    ram_per_gb_month_inr:   float
+    disk_per_gb_month_inr:  float
+    usd_rate:               float
+
+@app.post("/api/admin/pricing")
+def save_pricing(body: PricingUpdate, u=Depends(require_role("admin"))):
+    import datetime
+    data = body.dict()
+    data["updated_by"] = u["username"]
+    data["updated_at"]  = datetime.datetime.utcnow().isoformat()
+    _PRICING_FILE.write_text(json.dumps(data, indent=2))
+    audit(u["username"], "PRICING_UPDATE", detail=str(data), role=u["role"])
+    return {"status": "ok", "pricing": data}

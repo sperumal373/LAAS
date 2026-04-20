@@ -1,0 +1,118 @@
+Subject: LaaS Dashboard v6.2 — Now Live | Start Using & Share Your Feedback
+
+Dear Team,
+
+I am pleased to announce that the LaaS (Lab as a Service) Dashboard v6.2 is now fully operational and ready for daily use by the entire SDX Infrastructure & Data Centre team. This unified portal consolidates eight enterprise infrastructure platforms into a single browser-based interface — eliminating the need to log into individual platform consoles.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  🔗  ACCESS THE DASHBOARD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  URL:   https://<server-ip>
+  Port:  443 (HTTPS)
+  Login: Your AD credentials (sdxtest.local)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+PLATFORMS INTEGRATED
+─────────────────────────────────────────────
+  🖥️  VMware vCenter       — VMs, hosts, snapshots, cloning, vMotion, chargeback
+  🔴  Red Hat OpenShift     — Clusters, nodes, pods, operators, routes, RHOAI
+  🟩  Nutanix Prism Central — Multi-site DC/DR, AHV VMs, storage, alerts
+  🤖  Ansible AAP           — Job templates, inventories, live job execution
+  ☁️  Amazon Web Services   — EC2, S3, RDS, VPCs, Cost Explorer
+  🪟  Microsoft Hyper-V     — VMs, checkpoints, CPU/RAM monitoring via WinRM
+  🗂️  Active Directory/DNS  — Users, groups, DNS records via LDAP (no WinRM)
+  📡  IPAM (SolarWinds)     — Subnet grid, IP utilisation, IP search
+
+
+KEY CAPABILITIES
+─────────────────────────────────────────────
+  ✓ Full VM lifecycle — power, clone, migrate, reconfigure, snapshots
+  ✓ OpenShift node cordon/drain, pod log streaming, operator health
+  ✓ Self-service VM Request Wizard (VMware / OpenShift / Nutanix)
+  ✓ Chargeback — monthly costs in ₹ INR and $ USD per project
+  ✓ Universal Search — find any VM, host, pod, contact instantly
+  ✓ LaaS AI Assistant — natural-language infrastructure queries
+  ✓ AD user/group management + DNS zone/record management
+  ✓ Asset Inventory with inline editing and CSV export
+  ✓ Three themes: Dark, Light, Wipro Wings
+  ✓ Full Audit Log — every portal action tracked and exportable
+  ✓ Voiceover walkthrough accessible from the About LaaS section
+
+
+★ NEW IN v6.2 — INSIGHTS & ANALYTICS ENGINE
+─────────────────────────────────────────────
+  📊 Health Scorecard    — Real-time RAG status across all 8 platforms with trend arrows
+  🔀 Change Detection    — Automatic day-over-day drift alerts (VMs, hosts, pods, IPs)
+  💰 Capacity & Cost     — Storage/compute exhaustion predictions + ₹/$ chargeback
+  📋 Executive Summary   — One-page PDF-ready overview with KPIs and health matrix
+  📈 Historical Trending — Interactive charts for 7/14/30-day trends
+  🔮 Capacity Forecasting— Linear regression predictions for resource exhaustion dates
+  🗄️ Daily Snapshots     — Automated nightly collector (11 PM) into PostgreSQL database
+
+
+📝 YOUR FEEDBACK IS ESSENTIAL
+─────────────────────────────────────────────
+We encourage every team member to START USING THE DASHBOARD ACTIVELY
+FROM TODAY and share your feedback so we can enhance it further at the
+earliest. Based on your inputs, we will prioritise improvements and
+deliver them in the next release cycle.
+
+Please share your observations on:
+
+  1. FUNCTIONALITY   — Are all features working as expected?
+                       Any bugs or errors encountered?
+
+  2. CAPABILITIES    — Are there additional features, platforms,
+                       or data points you would like to see?
+
+  3. USER EXPERIENCE — Is the navigation intuitive?
+                       Are load times acceptable? UI improvements?
+
+  4. USEFULNESS      — Which features are most valuable for your
+                       daily work? What saves you the most time?
+
+  5. MISSING WORKFLOWS — Any operational workflows not yet covered
+                          that would benefit from portal integration?
+
+Every suggestion will be reviewed and prioritised. Your feedback
+directly shapes the next version of this portal.
+
+
+📞 CONTACT & SUPPORT
+─────────────────────────────────────────────
+  👑 Mayur Anilkumar Shah
+     Account Delivery Head (ADH)
+     ✉️  mayur.shah@wipro.com
+
+  🏗️ Khalid Khan
+     Engineering Head
+     ✉️  khalid.khan@wipro.com
+
+  🖥️ Sekhar Perumal
+     Infrastructure Lead — DC & VMware
+     ✉️  sekhar.perumal@wipro.com
+
+
+A detailed Features & Screenshots Guide (PDF) is attached for your
+reference. It covers every page of the dashboard with actual screenshots,
+feature checklists, and a step-by-step usage guide.
+
+Looking forward to your active participation and valuable feedback.
+Together, we can make this portal an indispensable tool for the
+entire team.
+
+
+Best Regards,
+Sekhar Perumal
+Infrastructure Lead — DC & VMware
+Wipro Limited · SDX Infrastructure & Data Centre Operations
+✉️ sekhar.perumal@wipro.com
+
+─────────────────────────────────────────────
+LaaS Dashboard v6.2 · Wipro SDX INFRA & DC Operations · March 2026
+Confidential — For Internal Use Only
+
+Attachments:
+  📎 LaaS_Features_Screenshots.pdf (6.4 MB)
+  📎 LaaS_Dashboard_Overview.pdf (458 KB)

@@ -1,0 +1,1 @@
+﻿"node"   "C:\Users\Administrator\AppData\Roaming\npm\\node_modules\serve\build\main.js" dist -l 3000

@@ -1,0 +1,103 @@
+def get_volume_topology(arr: dict, volume_name: str) -> dict:
+    """
+    Build a complete topology map for a single volume showing:
+    - Volume details (serial, size, WWN, etc.)
+    - Connected hosts with IQN / WWN / NQN identifiers
+    - LUN IDs, port mappings, protocol info
+    - SnapMirror / replication relationships (NetApp)
+    - Cross-vendor normalised result so the frontend can render uniformly.
+    Returns: {
+        "vendor": str,
+        "volume": { name, serial, wwn, size_bytes, used_bytes, protocol, ... },
+        "connections": [
+            {
+                "host": str,
+                "host_group": str|None,
+                "lun_id": int|None,
+                "port": str|None,
+                "protocol": str,          # "iSCSI"|"FC"|"NVMe-oF"|"NFS"|"SMB"|"NVMe/TCP"|"SAS"|"unknown"
+                "iqns": [str],
+                "wwns": [str],
+                "nqns": [str],
+                "os_type": str|None,
+                "active": bool,
+                "volume_wwn": str|None,
+            }
+        ],
+        "replication": [
+            { "direction": "outbound"|"inbound", "remote_volume": str,
+              "remote_svm": str, "state": str, "healthy": bool|None, "lag_time": str }
+        ],
+        "storage_ports": [
+            { "name": str, "wwn": str|None, "ip": str|None, "protocol": str, "link_state": str }
+        ],
+        "error": str|None
+    }
+    """
+    vendor  = arr.get("vendor", "")
+    result  = {
+        "vendor": vendor,
+        "volume": {},
+        "connections": [],
+        "replication": [],
+        "storage_ports": [],
+        "error": None,
+    }
+    try:
+        data = get_array_data(arr)
+    except Exception as e:
+        result["error"] = str(e)
+        return result
+
+    # ── Pure FlashArray ──────────────────────────────────────────────
+    if vendor == "Pure FlashArray":
+        vol_list   = data.get("volume_list", [])
+        conn_list  = data.get("connection_list", [])
+        host_list  = data.get("host_list", [])
+        port_list  = data.get("port_list", [])
+
+        vol = next((v for v in vol_list if v["name"] == volume_name), None)
+        if vol:
+            result["volume"] = {
+                "name":        vol.get("name"),
+                "serial":      vol.get("serial", ""),
+                "size_bytes":  vol.get("provisioned_bytes", 0),
+                "used_bytes":  vol.get("used_bytes", 0),
+                "pod":         vol.get("pod", ""),
+                "protocol":    "iSCSI/FC",
+                "wwn":         "",
+            }
+
+        for conn in conn_list:
+            if conn.get("volume") != volume_name:
+                continue
+            host_name = conn.get("host", "")
+            host_rec  = next((h for h in host_list if h.get("name") == host_name), {})
+            result["connections"].append({
+                "host":        host_name,
+                "host_group":  conn.get("host_group") or host_rec.get("host_group"),
+                "lun_id":      conn.get("lun"),
+                "port":        None,
+                "protocol":    host_rec.get("protocol", "iSCSI/FC"),
+                "iqns":        host_rec.get("iqns", []),
+                "wwns":        host_rec.get("wwns", []),
+                "nqns":        host_rec.get("nqns", []),
+                "os_type":     None,
+                "active":      True,
+                "volume_wwn":  None,
+            })
+
+        for pt in port_list:
+            result["storage_ports"].append({
+                "name":       pt.get("name", ""),
+                "wwn":        pt.get("wwwn") or pt.get("wwn"),
+                "ip":         pt.get("iqn"),
+                "protocol":   "FC" if (pt.get("wwwn") or pt.get("wwn")) else "iSCSI",
+                "link_state": pt.get("status", ""),
+            })
+
+    # ── NetApp ONTAP ─────────────────────────────────────────────────
+    elif vendor == "NetApp":
+        vol_list    = data.get("volume_list", [])
+        lun_list    = data.get("lun_list", [])
+        igroup
