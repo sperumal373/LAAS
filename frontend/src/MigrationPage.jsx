@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import {
   fetchVCenters, fetchVMs, fetchHosts,
   fetchOCPClusters, fetchOCPOperators, fetchOCPLiveNodes, fetchOCPStorageClasses,
@@ -6,6 +6,7 @@ import {
   fetchHVHosts, fetchHVStatus, fetchHVVMs,
   fetchDatastores, fetchNetworks,
   fetchMigrationPlans, createMigrationPlan, deleteMigrationPlan, updatePlanStatus, executeMigrationPlan, fetchPlanEvents, runPreflightCheck,
+  fetchMoveGroups, createMoveGroup, deleteMoveGroup, addVMsToGroup, removeVMFromGroup, migrateGroup,
 } from "./api";
 
 /* ============================================================
@@ -69,6 +70,7 @@ export default function MigrationPage({ currentUser, p }) {
   const [allVMs, setAllVMs] = useState([]);
   const [vmSearch, setVmSearch] = useState("");
   const [selVMs, setSelVMs] = useState({});
+  const skipVCEffectRef = useRef(false);
   const [loadingVMs, setLoadingVMs] = useState(false);
 
   // Step 2 state
@@ -96,6 +98,18 @@ export default function MigrationPage({ currentUser, p }) {
   const [planName, setPlanName] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Move Groups state
+  const [moveGroups, setMoveGroups] = useState([]);
+  const [mgLoading, setMgLoading] = useState(false);
+  const [mgName, setMgName] = useState("");
+  const [mgExpanded, setMgExpanded] = useState(null);
+  const [mgAddVC, setMgAddVC] = useState("");
+  const [mgAddVMs, setMgAddVMs] = useState([]);
+  const [mgAddSel, setMgAddSel] = useState({});
+  const [mgAddLoading, setMgAddLoading] = useState(false);
+  const [mgMigrateId, setMgMigrateId] = useState(null);
+  const [mgTargetPlatform, setMgTargetPlatform] = useState("");
+
   // Migration Options state
   const [migWarm, setMigWarm] = useState(false);
   const [migPowerOn, setMigPowerOn] = useState(true);
@@ -118,6 +132,7 @@ export default function MigrationPage({ currentUser, p }) {
   const [liveEvents, setLiveEvents] = useState([]);
   const [liveProgress, setLiveProgress] = useState(0);
   const [liveStatus, setLiveStatus] = useState("");
+  const [liveMtvStatus, setLiveMtvStatus] = useState(null);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -131,6 +146,7 @@ export default function MigrationPage({ currentUser, p }) {
 
   // Load VMs when vCenter selected
   useEffect(() => {
+    if (skipVCEffectRef.current) { skipVCEffectRef.current = false; return; }
     if (!selVC) { setAllVMs([]); setHosts([]); return; }
     setLoadingVMs(true);
     Promise.all([fetchVMs(), fetchHosts()])
@@ -152,6 +168,81 @@ export default function MigrationPage({ currentUser, p }) {
     fetchMigrationPlans().then(r => setPlans(r.plans || [])).catch(() => {}).finally(() => setLoadingPlans(false));
   }, []);
   useEffect(() => { if (tab === "plans") loadPlans(); }, [tab]);
+  useEffect(() => { if (tab === "groups") loadGroups(); }, [tab]);
+
+  async function loadGroups() {
+    setMgLoading(true);
+    try { const g = await fetchMoveGroups(); setMoveGroups(g || []); } catch {}
+    setMgLoading(false);
+  }
+
+  async function handleCreateGroup() {
+    if (!mgName.trim()) return;
+    try {
+      await createMoveGroup(mgName.trim());
+      setMgName("");
+      loadGroups();
+      showToast("Move group created!", "success");
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function handleDeleteGroup(gid) {
+    if (!confirm("Delete this move group and all its VMs?")) return;
+    try { await deleteMoveGroup(gid); loadGroups(); showToast("Group deleted", "success"); } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function handleAddVMsToGroup(gid) {
+    const selected = Object.entries(mgAddSel).filter(([,v]) => v).map(([k]) => mgAddVMs.find(v => v.name === k)).filter(Boolean);
+    if (!selected.length) return showToast("Select at least one VM", "error");
+    const vc = vcenters.find(v => String(v.id) === String(mgAddVC));
+    try {
+      const r = await addVMsToGroup(gid, selected, mgAddVC, vc?.name || mgAddVC);
+      showToast(`Added ${r.added} VM(s)`, "success");
+      setMgAddSel({}); loadGroups();
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function handleRemoveVM(gid, vmId) {
+    try { await removeVMFromGroup(gid, vmId); loadGroups(); } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function handleMigrateFromGroup(group) {
+    if (!group.vms || !group.vms.length) return showToast("No VMs in this group", "error");
+    const firstVC = group.vms[0].vcenter_id;
+    const vcName = group.vms[0].vcenter_name || firstVC;
+    const groupVMNames = new Set(group.vms.filter(v => v.vcenter_id === firstVC).map(v => v.vm_name));
+    // Fetch fresh VM data from vCenter for full fields (network, datastore, snapshots)
+    showToast("Loading VMs from vCenter...", "success");
+    try {
+      const vr = await fetchVMs(firstVC);
+      const allVms = (Array.isArray(vr) ? vr : vr.vms || []).filter(v => v.vcenter_id === firstVC || !v.vcenter_id);
+      skipVCEffectRef.current = true;
+      setSelVC(firstVC);
+      setAllVMs(allVms);
+      // Pre-select VMs that are in the group
+      const vmMap = {};
+      allVms.forEach(v => { if (groupVMNames.has(v.name)) vmMap[v.moid || v.name] = true; });
+      setSelVMs(vmMap);
+      setPlanName(group.name);
+      setStep(1); // Target selection
+      setTab("new");
+      const multiVC = new Set(group.vms.map(v => v.vcenter_id)).size > 1;
+      if (multiVC) showToast(`Loaded ${Object.keys(vmMap).length} VMs from ${vcName}. Create separate plans for other vCenters.`, "success");
+      else showToast(`Loaded ${Object.keys(vmMap).length} VMs into wizard. Select your target.`, "success");
+    } catch (e) { showToast("Failed to load VMs: " + e.message, "error"); }
+  }
+
+  async function loadVMsForGroup(vcId) {
+    setMgAddLoading(true); setMgAddVMs([]); setMgAddSel({});
+    try {
+      const vc = vcenters.find(v => String(v.id) === String(vcId));
+      if (vc) {
+        const data = await fetchVMs(vc.id);
+        setMgAddVMs(data || []);
+      }
+    } catch {}
+    setMgAddLoading(false);
+  }
 
   // Derived
   const filteredVMs = allVMs
@@ -330,6 +421,7 @@ export default function MigrationPage({ currentUser, p }) {
         setLiveEvents(r.event_log || []);
         setLiveProgress(r.progress || 0);
         setLiveStatus(r.status || "");
+        if (r.mtv_status) setLiveMtvStatus(r.mtv_status);
         if (["completed", "failed", "cancelled", "rolled_back"].includes(r.status)) {
           setPollingPlan(null);
           loadPlans();
@@ -340,6 +432,7 @@ export default function MigrationPage({ currentUser, p }) {
       setLiveEvents(r.event_log || []);
       setLiveProgress(r.progress || 0);
       setLiveStatus(r.status || "");
+      if (r.mtv_status) setLiveMtvStatus(r.mtv_status);
     }).catch(() => {});
     return () => clearInterval(interval);
   }, [pollingPlan]);
@@ -409,6 +502,16 @@ export default function MigrationPage({ currentUser, p }) {
     } else if (["cancelled","rolled_back"].includes(s)) {
       acts.push({ label: "↩ Reset to Planned", color: "#5b8def", fn: () => doUpdateStatus(plan.id, "planned") });
     }
+    // Admin: Cancel during active migration
+    if (currentUser?.role === "admin" && ["executing","migrating","validating"].includes(s)) {
+      acts.push({ label: "✖ Cancel Migration", color: "#ef4444", confirm: true, fn: () => doUpdateStatus(plan.id, "cancelled", "Cancelled by admin") });
+    }
+    // Admin: Delete plan
+    if (currentUser?.role === "admin") {
+      acts.push({ label: "🗑 Delete Plan", color: "#dc2626", confirm: true, fn: async () => {
+        try { await deleteMigrationPlan(plan.id); showToast("Plan deleted", "success"); loadPlans(); } catch (e) { showToast(e.message, "error"); }
+      }});
+    }
     return acts;
   };
 
@@ -440,7 +543,7 @@ export default function MigrationPage({ currentUser, p }) {
         <div style={{ flex: 1 }} />
         {/* Tab toggle */}
         <div style={{ display: "flex", background: p.surface, borderRadius: 10, border: `1px solid ${p.border}`, overflow: "hidden" }}>
-          {[["new", "✨ New Migration"], ["plans", "📋 Plans"]].map(([id, label]) => (
+          {[["new", "✨ New Migration"], ["groups", "📦 Move Groups"], ["plans", "📋 Plans"]].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               padding: "8px 20px", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
               background: tab === id ? p.accent : "transparent", color: tab === id ? "#fff" : p.textSub,
@@ -979,6 +1082,122 @@ export default function MigrationPage({ currentUser, p }) {
         )}
       </>)}
 
+      {/* ======================== MOVE GROUPS TAB ======================== */}
+      {tab === "groups" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Create new group */}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input value={mgName} onChange={e => setMgName(e.target.value)} placeholder="New group name..."
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1px solid ${p.border}`, background: p.surface, color: p.text, fontSize: 13 }}
+              onKeyDown={e => e.key === "Enter" && handleCreateGroup()} />
+            <button onClick={handleCreateGroup} disabled={!mgName.trim()}
+              style={{ padding: "10px 22px", borderRadius: 8, border: "none", background: p.accent, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", opacity: mgName.trim() ? 1 : 0.5 }}>
+              + Create Group
+            </button>
+          </div>
+
+          {mgLoading ? <LoadDots p={p} /> : moveGroups.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 60, color: p.textMute, fontSize: 14 }}>
+              No move groups yet. Create one above to batch VMs for migration.
+            </div>
+          ) : moveGroups.map(g => {
+            const isExp = mgExpanded === g.id;
+            const isMigrating = mgMigrateId === g.id;
+            return (
+              <div key={g.id} style={{ background: p.surface, borderRadius: 12, border: `1px solid ${isExp ? p.accent : p.border}`, overflow: "hidden", transition: "all .2s" }}>
+                {/* Group header */}
+                <div onClick={() => setMgExpanded(isExp ? null : g.id)} style={{ display: "flex", alignItems: "center", padding: "14px 18px", cursor: "pointer", gap: 12 }}>
+                  <span style={{ fontSize: 20 }}>{isExp ? "▼" : "▶"}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: p.text }}>{g.name}</div>
+                    <div style={{ fontSize: 11.5, color: p.textMute, marginTop: 2 }}>
+                      {g.vm_count} VM(s) · {(g.vcenters || []).join(", ") || "No vCenters"} · Created {g.created_at?.slice(0,16)}
+                    </div>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); handleMigrateFromGroup(g); }} disabled={!g.vm_count}
+                    style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: g.vm_count ? "#10b981" : p.border, color: "#fff", fontWeight: 700, fontSize: 12, cursor: g.vm_count ? "pointer" : "default", opacity: g.vm_count ? 1 : 0.5 }}>
+                    🚀 Migrate
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); handleDeleteGroup(g.id); }}
+                    style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                    🗑
+                  </button>
+                </div>
+
+                {/* Expanded: VM list + Add VMs */}
+                {isExp && (
+                  <div style={{ padding: "0 18px 16px", borderTop: `1px solid ${p.border}` }}>
+                    {/* Existing VMs in group */}
+                    {(g.vms || []).length > 0 && (
+                      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12, fontSize: 12.5 }}>
+                        <thead><tr style={{ color: p.textMute, textAlign: "left", borderBottom: `1px solid ${p.border}` }}>
+                          <th style={{ padding: "6px 8px" }}>VM</th>
+                          <th>vCenter</th><th>OS</th><th>CPU</th><th>Mem</th><th>Disk</th><th>Power</th><th></th>
+                        </tr></thead>
+                        <tbody>
+                          {g.vms.map(vm => (
+                            <tr key={vm.id} style={{ borderBottom: `1px solid ${p.border}22` }}>
+                              <td style={{ padding: "6px 8px", fontWeight: 600, color: p.text }}>{vm.vm_name}</td>
+                              <td style={{ color: p.textMute }}>{vm.vcenter_name || vm.vcenter_id}</td>
+                              <td style={{ color: p.textMute }}>{vm.guest_os || "—"}</td>
+                              <td>{vm.cpu || "—"}</td>
+                              <td>{vm.memory_mb ? `${(vm.memory_mb/1024).toFixed(1)} GB` : "—"}</td>
+                              <td>{vm.disk_gb ? `${vm.disk_gb.toFixed(1)} GB` : "—"}</td>
+                              <td><span style={{ color: vm.power_state === "poweredOn" ? "#10b981" : "#f59e0b", fontWeight: 600 }}>{vm.power_state === "poweredOn" ? "🟢" : "🟡"}</span></td>
+                              <td><button onClick={() => handleRemoveVM(g.id, vm.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontWeight: 700, fontSize: 14 }}>×</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+
+                    {/* Add VMs from vCenter */}
+                    <div style={{ marginTop: 14, padding: 14, borderRadius: 8, background: `${p.bg}`, border: `1px dashed ${p.border}` }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: p.text, marginBottom: 8 }}>Add VMs from vCenter</div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                        <select value={mgAddVC} onChange={e => { setMgAddVC(e.target.value); if (e.target.value) loadVMsForGroup(e.target.value); else { setMgAddVMs([]); setMgAddSel({}); } }}
+                          style={{ padding: "8px 12px", borderRadius: 7, border: `1px solid ${p.border}`, background: p.surface, color: p.text, fontSize: 12.5, minWidth: 200 }}>
+                          <option value="">Select vCenter...</option>
+                          {vcenters.map(vc => <option key={vc.id} value={vc.id}>{vc.name || vc.host}</option>)}
+                        </select>
+                        {mgAddVC && (
+                          <button onClick={() => handleAddVMsToGroup(g.id)} disabled={!Object.values(mgAddSel).some(Boolean)}
+                            style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: Object.values(mgAddSel).some(Boolean) ? p.accent : p.border, color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                            + Add Selected
+                          </button>
+                        )}
+                      </div>
+                      {mgAddLoading ? <LoadDots p={p} /> : mgAddVMs.length > 0 && (
+                        <div style={{ maxHeight: 250, overflow: "auto", borderRadius: 6, border: `1px solid ${p.border}` }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead><tr style={{ color: p.textMute, background: p.surface, position: "sticky", top: 0, textAlign: "left" }}>
+                              <th style={{ padding: "6px 8px", width: 30 }}><input type="checkbox" onChange={e => { const o = {}; mgAddVMs.forEach(v => o[v.name] = e.target.checked); setMgAddSel(o); }} /></th>
+                              <th>VM Name</th><th>OS</th><th>CPU</th><th>Mem</th><th>Power</th>
+                            </tr></thead>
+                            <tbody>
+                              {mgAddVMs.map(vm => (
+                                <tr key={vm.name} style={{ borderBottom: `1px solid ${p.border}22`, background: mgAddSel[vm.name] ? `${p.accent}10` : "transparent" }}>
+                                  <td style={{ padding: "5px 8px" }}><input type="checkbox" checked={!!mgAddSel[vm.name]} onChange={e => setMgAddSel(s => ({...s, [vm.name]: e.target.checked}))} /></td>
+                                  <td style={{ fontWeight: 600, color: p.text }}>{vm.name}</td>
+                                  <td style={{ color: p.textMute }}>{vm.guest_os || "—"}</td>
+                                  <td>{vm.cpu || "—"}</td>
+                                  <td>{vm.memory_mb ? `${(vm.memory_mb/1024).toFixed(1)} GB` : "—"}</td>
+                                  <td><span style={{ color: vm.power_state === "poweredOn" ? "#10b981" : "#f59e0b" }}>{vm.power_state === "poweredOn" ? "🟢" : "🟡"}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* ======================== PLANS TAB ======================== */}
       {tab === "plans" && (
         <div style={card}>
@@ -1031,6 +1250,7 @@ export default function MigrationPage({ currentUser, p }) {
                         </td>
                         <td style={{ ...tdStyle, fontSize: 13, fontWeight: 600 }}>{plan.created_at || "-"}</td>
                         <td style={tdStyle} onClick={e => e.stopPropagation()}>
+                          {currentUser?.role === "admin" && ["executing","migrating","validating"].includes(plan.status) && <button onClick={() => doUpdateStatus(plan.id, "cancelled")} style={{ background: "transparent", border: "none", cursor: "pointer", color: p.warn || "#f59e0b", fontWeight: 700, fontSize: 13 }} title="Cancel">{"✖"}</button>}
                           <button onClick={() => delPlan(plan.id)} style={{ background: "transparent", border: "none", cursor: "pointer", color: p.red, fontWeight: 700, fontSize: 11 }}>{"🗑️"}</button>
                         </td>
                       </tr>
@@ -1086,6 +1306,45 @@ export default function MigrationPage({ currentUser, p }) {
                                 <div style={{ height: 20, borderRadius: 10, background: `${p.textMute}20` }}>
                                   <div style={{ height: "100%", borderRadius: 10, background: `linear-gradient(90deg, ${sCfg.color}, ${sCfg.color}cc)`, width: `${pProgress}%`, transition: "width 1s ease", boxShadow: `0 0 8px ${sCfg.color}40` }} />
                                 </div>
+                              </div>
+                            )}
+                            {/* MTV Pipeline Stages */}
+                            {plan.target_platform === "openshift" && isLive && liveMtvStatus && liveMtvStatus.vms && liveMtvStatus.vms.length > 0 && (
+                              <div style={{ marginBottom: 14, padding: 14, borderRadius: 8, background: `${p.surface}`, border: `1px solid ${p.border}` }}>
+                                <div style={{ fontSize: 13, fontWeight: 800, color: p.text, marginBottom: 10, textTransform: "uppercase", letterSpacing: ".5px" }}>{"🔄"} MTV Migration Stages</div>
+                                {liveMtvStatus.vms.map((vm, vi) => {
+                                  const MTV_STAGES = ["Initialize","PreflightInspection","DiskTransfer","Cutover","ImageConversion","VirtualMachineCreation"];
+                                  const stageMap = {};
+                                  (vm.pipeline || []).forEach(s => { stageMap[s.name] = s; });
+                                  return (
+                                    <div key={vi} style={{ marginBottom: vi < liveMtvStatus.vms.length - 1 ? 12 : 0 }}>
+                                      <div style={{ fontSize: 12.5, fontWeight: 700, color: p.text, marginBottom: 8 }}>{"🖥️"} {vm.name || "VM"} <span style={{ fontSize: 11, fontWeight: 500, color: p.textMute, marginLeft: 6 }}>Phase: {vm.phase || "Pending"}</span></div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+                                        {MTV_STAGES.map((stg, si) => {
+                                          const info = stageMap[stg] || (stg === "DiskTransfer" ? stageMap["DiskTransferV2v"] || stageMap["DiskAllocation"] : null) || {};
+                                          const ph = info.phase || "Pending";
+                                          const done = ph === "Completed";
+                                          const run = ph === "Running" || ph === "InProgress";
+                                          const fail = ph === "Failed" || ph === "Error";
+                                          const clr = done ? "#22c55e" : run ? "#3b82f6" : fail ? "#ef4444" : `${p.textMute}55`;
+                                          const ico = done ? "✔" : run ? "⏳" : fail ? "✘" : "○";
+                                          const pct = info.total > 0 ? Math.round(info.completed / info.total * 100) : null;
+                                          const lbl = stg.replace(/([A-Z])/g, " $1").trim();
+                                          return <Fragment key={stg}>
+                                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, minWidth: 0 }}>
+                                              <div style={{ width: 30, height: 30, borderRadius: "50%", background: !done && !run && !fail ? `${p.textMute}15` : `${clr}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, border: `2px solid ${clr}`, boxShadow: run ? `0 0 10px ${clr}44` : "none", transition: "all .3s", animation: run ? "pulse 2s infinite" : "none" }}>
+                                                <span style={{ color: clr, fontWeight: 700 }}>{ico}</span>
+                                              </div>
+                                              <div style={{ fontSize: 10, marginTop: 3, color: !done && !run && !fail ? p.textMute : clr, fontWeight: run ? 800 : 600, textAlign: "center", lineHeight: 1.2, maxWidth: 80 }}>{lbl}</div>
+                                              {pct !== null && <div style={{ fontSize: 9, color: clr, fontWeight: 700, marginTop: 1 }}>{pct}%</div>}
+                                            </div>
+                                            {si < MTV_STAGES.length - 1 && <div style={{ flex: 0.6, height: 2, borderRadius: 1, background: done ? "#22c55e" : `${p.textMute}22`, transition: "background .5s", marginBottom: 20 }} />}
+                                          </Fragment>;
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                             {actions.length > 0 && (

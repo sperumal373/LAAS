@@ -1443,7 +1443,7 @@ function Overview({summary,hosts,alerts,summaries,vcenters,selectedVC,onCreateVM
                 <div style={{fontWeight:900,fontSize:19,letterSpacing:"1.5px",textTransform:"uppercase",background:`linear-gradient(90deg,${p.accent},${p.cyan})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
                   CISS-COE Infrastructure Overview
                 </div>
-                <div style={{fontSize:15,color:p.textMute,marginTop:2}}>Unified view across all managed platforms · Veekshan</div>
+                <div style={{fontSize:15,color:p.textMute,marginTop:2}}>Unified view across all managed platforms · Solution Sphere</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
                 <button
@@ -7896,7 +7896,7 @@ function Login({onLogin,p}){
       <div style={{position:"relative",width:420,animation:"fadeUp .4s ease",zIndex:1}}>
         <div style={{textAlign:"center",marginBottom:28}}>
           <img src="/wings.png" alt="Wipro Wings" style={{width:"100%",maxWidth:260,height:"auto",filter:"drop-shadow(0 4px 24px rgba(0,0,0,.6))",marginBottom:12}}/>
-          <div style={{fontSize:42,fontWeight:900,lineHeight:1.1,letterSpacing:"2px",background:"linear-gradient(135deg,#f59e0b,#facc15,#f97316,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textShadow:"0 0 40px rgba(249,115,22,0.35)",fontFamily:"'Georgia','Times New Roman',serif",marginTop:8,marginBottom:4,filter:"drop-shadow(0 2px 12px rgba(249,115,22,0.3))"}}>VEEKSHAN</div>
+          <div style={{fontSize:42,fontWeight:900,lineHeight:1.1,letterSpacing:"2px",background:"linear-gradient(135deg,#f59e0b,#facc15,#f97316,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textShadow:"0 0 40px rgba(249,115,22,0.35)",fontFamily:"'Georgia','Times New Roman',serif",marginTop:8,marginBottom:4,filter:"drop-shadow(0 2px 12px rgba(249,115,22,0.3))"}}>Solution Sphere</div>
           
           <div style={{fontSize:19,color:"rgba(255,255,255,.88)",fontWeight:600,letterSpacing:".5px",textShadow:"0 2px 12px rgba(0,0,0,.7)"}}>Lab as a Service Portal</div>
           <div style={{fontSize:14,color:"rgba(255,255,255,.50)",marginTop:4,letterSpacing:".3px"}}>Hybrid-Cloud Infrastructure Engineering Lab</div>
@@ -20273,7 +20273,7 @@ function Sidebar({page,setPage,vcenters,selectedVC,summaries,loading,error,alert
         <div style={{display:"flex",alignItems:"center",gap:11}}>
           <div style={{width:40,height:40,borderRadius:10,background:`linear-gradient(135deg,${p.accent},${p.cyan})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:25,flexShrink:0,boxShadow:`0 4px 14px ${p.accent}50`}}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{filter:"drop-shadow(0 0 3px rgba(255,255,255,0.6))"}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="1" fill="white"/></svg></div>
           <div>
-            <div style={{fontWeight:800,fontSize:22,lineHeight:1.2,letterSpacing:"-.3px",fontSize:26,lineHeight:1.05,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Veekshan</div>
+            <div style={{fontWeight:800,fontSize:22,lineHeight:1.2,letterSpacing:"-.3px",fontSize:26,lineHeight:1.05,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Solution Sphere</div>
             <div style={{fontSize:11.5,color:p.accent,marginTop:3,letterSpacing:"1.5px",fontWeight:700,textTransform:"uppercase"}}>CISS-COE Infrastructure</div>
             <div style={{fontSize:11,color:p.textMute,marginTop:1,letterSpacing:".3px",fontWeight:400,fontStyle:"italic",opacity:0.65}}>Lab as a Service</div>
           </div>

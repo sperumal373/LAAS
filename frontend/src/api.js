@@ -838,3 +838,11 @@ export async function updatePlanStatus(id, body)    { return _patch(`/api/migrat
 export async function executeMigrationPlan(id)     { return _post(`/api/migration/plans/${id}/execute`, {}); }
 export async function fetchPlanEvents(id)          { return _get(`/api/migration/plans/${id}/events`); }
 export async function runPreflightCheck(body)        { return _post("/api/migration/preflight", body); }
+// ---- Move Groups ----
+export async function fetchMoveGroups()              { return _get("/api/migration/move-groups"); }
+export async function createMoveGroup(name, desc)     { return _post("/api/migration/move-groups", {name, description: desc || ""}); }
+export async function deleteMoveGroup(id)            { return _delete("/api/migration/move-groups/" + id); }
+export async function addVMsToGroup(gid, vms, vcenter_id, vcenter_name) { return _post("/api/migration/move-groups/" + gid + "/vms", {vms, vcenter_id, vcenter_name}); }
+export async function removeVMFromGroup(gid, vid)    { return _delete("/api/migration/move-groups/" + gid + "/vms/" + vid); }
+export async function migrateGroup(gid, target_platform, target_detail, options) { return _post("/api/migration/move-groups/" + gid + "/migrate", {target_platform, target_detail: target_detail || {}, options: options || {}}); }
+
