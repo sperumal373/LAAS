@@ -247,7 +247,7 @@ export default function MigrationPage({ currentUser, p }) {
   // Derived
   const filteredVMs = allVMs
     .filter(v => !selHost || v.host === selHost)
-    .filter(v => !vmSearch || v.name?.toLowerCase().includes(vmSearch.toLowerCase()) || v.guest_os?.toLowerCase().includes(vmSearch.toLowerCase()));
+    .filter(v => !vmSearch || v.name?.toLowerCase().includes(vmSearch.toLowerCase()) || v.guest_os?.toLowerCase().includes(vmSearch.toLowerCase()) || v.ip?.toLowerCase().includes(vmSearch.toLowerCase()) || (Array.isArray(v.tags) && v.tags.some(t => t.toLowerCase().includes(vmSearch.toLowerCase()))));
   const selectedVMList = allVMs.filter(v => selVMs[v.moid || v.name]);
   const selCount = selectedVMList.length;
   const totalCPU = selectedVMList.reduce((s, v) => s + (v.cpu || 0), 0);
@@ -630,12 +630,14 @@ export default function MigrationPage({ currentUser, p }) {
                         <th style={thStyle}>RAM (GB)</th>
                         <th style={thStyle}>Disk (GB)</th>
                         <th style={thStyle}>Guest OS</th>
+                        <th style={thStyle}>IP Address</th>
+                        <th style={thStyle}>VM Tags</th>
                         <th style={thStyle}>ESXi Host</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredVMs.length === 0 ? (
-                        <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: p.textMute, padding: 30 }}>No VMs found</td></tr>
+                        <tr><td colSpan={10} style={{ ...tdStyle, textAlign: "center", color: p.textMute, padding: 30 }}>No VMs found</td></tr>
                       ) : filteredVMs.map(vm => {
                         const key = vm.moid || vm.name;
                         const sel = !!selVMs[key];
@@ -650,6 +652,8 @@ export default function MigrationPage({ currentUser, p }) {
                             <td style={tdStyle}>{vm.ram_gb ? (vm.ram_gb || 0).toFixed(1) : "-"}</td>
                             <td style={tdStyle}>{vm.disk_gb ? parseFloat(vm.disk_gb).toFixed(1) : "-"}</td>
                             <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500 }}>{vm.guest_os || "-"}</td>
+                            <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500, fontFamily: "monospace" }}>{vm.ip || "-"}</td>
+                            <td style={{ ...tdStyle, fontSize: 11, fontWeight: 500 }}>{Array.isArray(vm.tags) && vm.tags.length ? vm.tags.join(", ") : "-"}</td>
                             <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500 }}>{vm.host || "-"}</td>
                           </tr>
                         );
