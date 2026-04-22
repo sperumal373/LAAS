@@ -30,7 +30,7 @@ function proxyToBackend(req, res) {
     if (body.length > 0) hdrs['content-length'] = body.length;
 
     // AI chat needs longer timeout for local LLM inference
-    var timeoutMs = req.url.startsWith('/api/ai/chat') ? 180000 : 30000;
+    var timeoutMs = (req.url.startsWith('/api/ai/chat') ? 180000 : (req.url.indexOf('/post-tasks/playbooks') !== -1 ? 120000 : 30000));
 
     var options = {
       hostname: '127.0.0.1',
@@ -84,7 +84,7 @@ function serveStatic(req, res) {
   try {
     var data = fs.readFileSync(fp);
     res.writeHead(200, {'Content-Type': ct, 'Content-Length': data.length,
-                          'Cache-Control': 'no-cache'});
+                          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', 'Pragma': 'no-cache', 'Expires': '0'});
     res.end(data);
   } catch(e) {
     res.writeHead(404); res.end('Not found');

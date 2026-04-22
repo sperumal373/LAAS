@@ -333,6 +333,170 @@ def get_vcenter_list():
     return [{"id":v["host"],"name":v["name"],"host":v["host"]} for v in VCENTERS]
 
 
+
+#  Application Detection 
+_APP_PATTERNS = [
+    # Databases
+    {"pattern": r"oracle|ora[0-9]|orcl",          "app": "Oracle DB",        "icon": "ora",   "category": "database"},
+    {"pattern": r"mssql|sqlserver|sql.?srv",       "app": "MS SQL Server",    "icon": "mssql", "category": "database"},
+    {"pattern": r"postgres|pgsql|pgdb",            "app": "PostgreSQL",       "icon": "pg",    "category": "database"},
+    {"pattern": r"mysql|mariadb|maria",            "app": "MySQL/MariaDB",    "icon": "mysql", "category": "database"},
+    {"pattern": r"mongo",                          "app": "MongoDB",          "icon": "mongo", "category": "database"},
+    {"pattern": r"redis",                          "app": "Redis",            "icon": "redis", "category": "database"},
+    {"pattern": r"cassandra",                      "app": "Cassandra",        "icon": "cass",  "category": "database"},
+    {"pattern": r"elastic|elk|kibana|logstash",    "app": "Elasticsearch",    "icon": "elk",   "category": "database"},
+    {"pattern": r"\bdb\b|database|\bvdb\b|\bdbs\b",  "app": "Database",         "icon": "db",    "category": "database"},
+    # Web / App Servers
+    {"pattern": r"apache|httpd|websvr",            "app": "Apache HTTP",      "icon": "web",   "category": "web"},
+    {"pattern": r"nginx",                          "app": "Nginx",            "icon": "web",   "category": "web"},
+    {"pattern": r"tomcat|catalina",                "app": "Tomcat",           "icon": "java",  "category": "web"},
+    {"pattern": r"iis|webserver",                  "app": "IIS Web Server",   "icon": "iis",   "category": "web"},
+    {"pattern": r"jboss|wildfly",                  "app": "JBoss/WildFly",    "icon": "java",  "category": "web"},
+    {"pattern": r"weblogic|wls",                   "app": "WebLogic",         "icon": "java",  "category": "web"},
+    {"pattern": r"websphere",                      "app": "WebSphere",        "icon": "java",  "category": "web"},
+    # DevOps / CI-CD
+    {"pattern": r"jenkins",                        "app": "Jenkins",          "icon": "ci",    "category": "devops"},
+    {"pattern": r"gitlab",                         "app": "GitLab",           "icon": "ci",    "category": "devops"},
+    {"pattern": r"ansible|tower|aap",              "app": "Ansible/AAP",      "icon": "auto",  "category": "devops"},
+    {"pattern": r"terraform",                      "app": "Terraform",        "icon": "auto",  "category": "devops"},
+    {"pattern": r"cicd|pipeline|bamboo|argo",      "app": "CI/CD Pipeline",   "icon": "ci",    "category": "devops"},
+    # Container / K8s
+    {"pattern": r"k8s|kube|kubernetes|ocp|openshift", "app": "Kubernetes",    "icon": "k8s",   "category": "container"},
+    {"pattern": r"docker|container|podman",        "app": "Container Host",   "icon": "k8s",   "category": "container"},
+    {"pattern": r"rancher",                        "app": "Rancher",          "icon": "k8s",   "category": "container"},
+    # Infrastructure
+    {"pattern": r"\\bdc\\b|\\bad\\b|activedirectory|domain.?controller|ldap", "app": "Active Directory", "icon": "ad", "category": "infra"},
+    {"pattern": r"\\bdns\\b|named|bind9",      "app": "DNS Server",       "icon": "dns",   "category": "infra"},
+    {"pattern": r"\\bdhcp\\b",                  "app": "DHCP Server",      "icon": "net",   "category": "infra"},
+    {"pattern": r"ntp|chrony|timeserver",          "app": "NTP Server",       "icon": "net",   "category": "infra"},
+    {"pattern": r"vcsa|vcenter|vsphere",           "app": "vCenter/VCSA",     "icon": "vmw",   "category": "infra"},
+    {"pattern": r"esxi|hypervisor",                "app": "ESXi Nested",      "icon": "vmw",   "category": "infra"},
+    {"pattern": r"nfs|cifs|samba|fileserver|nas",  "app": "File Server",      "icon": "stor",  "category": "infra"},
+    {"pattern": r"\\bvpn\\b|firewall|pfsense|fortigate", "app": "Network/Firewall", "icon": "net", "category": "infra"},
+    # Monitoring
+    {"pattern": r"nagios|zabbix|prometheus|grafana|splunk|solarwinds|prtg", "app": "Monitoring", "icon": "mon", "category": "monitoring"},
+    # Mail
+    {"pattern": r"exchange|smtp|postfix|sendmail|mail", "app": "Mail Server", "icon": "mail", "category": "mail"},
+    # Backup
+    {"pattern": r"veeam|cohesity|rubrik|networker|commvault|backup", "app": "Backup", "icon": "bak", "category": "backup"},
+]
+
+def _detect_applications(vm: dict) -> list[dict]:
+    """Detect applications from VM name, guest OS, annotation, tags, and folder."""
+    found = []
+    seen = set()
+    # Build search corpus from all available signals
+    corpus = " ".join([
+        (vm.get("name") or ""),
+        (vm.get("guest_os") or ""),
+        (vm.get("guest_id") or ""),
+        (vm.get("annotation") or ""),
+        (vm.get("folder") or ""),
+        " ".join(vm.get("tags") or []),
+    ]).lower()
+    for rule in _APP_PATTERNS:
+        if rule["app"] in seen:
+            continue
+        if re.search(rule["pattern"], corpus, re.IGNORECASE):
+            found.append({"app": rule["app"], "icon": rule["icon"], "category": rule["category"]})
+            seen.add(rule["app"])
+    return found
+
+
+
+#  Topology Detection (Standalone vs Cluster) 
+_CLUSTER_NAME_KW = re.compile(
+    r'(rac\d|rac[_-]|node[_-]?\d|cluster|master\d*[_-]|worker\d*[_-]|'
+    r'member|primary|secondary|replica|standby|dataguard|goldengate|'
+    r'fci|wsfc|pacemaker|pcs[_-]|haproxy|keepalived|controlplane|etcd[_-]?\d)', re.I
+)
+_CLUSTER_ANN_KW = re.compile(
+    r'(cluster|rac\b|node\s*\d|dataguard|data\s*guard|golden\s*gate|'
+    r'always.?on|failover|ha\s|high.?avail|replica|standby|primary|secondary)', re.I
+)
+_CLUSTER_APPS = {'Kubernetes', 'Container Host', 'Rancher', 'Active Directory'}
+_CLUSTER_DB_KW = re.compile(r'(rac|guard|gate|replica|repl|standby|aog|fci|wsfc|cluster)', re.I)
+
+def _detect_topology_for_all(vms: list) -> None:
+    suffix_pat = re.compile(r'^(.+?)[_-]?0*(\d{1,3})$')
+    groups = {}
+    vm_to_base = {}
+    for vm in vms:
+        name = vm.get('name', '')
+        m = suffix_pat.match(name)
+        if m:
+            base = m.group(1).rstrip('-_ ').lower()
+            if len(base) >= 4:
+                groups.setdefault(base, []).append(name)
+                vm_to_base[name] = base
+    multi_groups = {b for b, n in groups.items() if len(n) >= 2}
+
+    for vm in vms:
+        name = vm.get('name', '')
+        ann = vm.get('annotation', '') or ''
+        apps = {a['app'] for a in vm.get('applications', [])}
+        topo, cgroup, crole, ctype = 'Standalone', None, None, None
+        nl = name.lower()
+
+        # Signal 1: Name keywords
+        if _CLUSTER_NAME_KW.search(name):
+            topo = 'Cluster'
+            if any(k in nl for k in ('master', 'primary', 'controlplane')): crole = 'Primary'
+            elif any(k in nl for k in ('worker', 'secondary', 'replica', 'standby')): crole = 'Secondary'
+            elif 'node' in nl: crole = 'Node'
+
+        # Signal 2: Multi-instance name group
+        base = vm_to_base.get(name, '').lower()
+        if base in multi_groups:
+            topo = 'Cluster'
+            cgroup = base
+
+        # Signal 3: Inherently clustered apps
+        if apps & _CLUSTER_APPS:
+            topo = 'Cluster'
+            if apps & {'Kubernetes', 'Rancher'}: ctype = ctype or 'K8s'
+            elif 'Active Directory' in apps: ctype = ctype or 'AD'
+
+        # Signal 4: Database + cluster keywords
+        db_apps = apps & {'Oracle DB', 'MS SQL Server', 'PostgreSQL', 'MySQL/MariaDB', 'Database'}
+        if db_apps and _CLUSTER_DB_KW.search(name):
+            topo = 'Cluster'
+            if 'Oracle DB' in apps:
+                if re.search(r'\brac\b', nl): ctype = 'Oracle RAC'
+                elif re.search(r'guard|\bdg\b', nl): ctype = 'Oracle Data Guard'
+                elif re.search(r'gate', nl): ctype = 'Oracle GoldenGate'
+                else: ctype = ctype or 'Oracle Cluster'
+            elif 'MS SQL Server' in apps:
+                if re.search(r'aog|always', nl): ctype = 'SQL Always On'
+                elif re.search(r'fci|wsfc|cluster', nl): ctype = 'SQL FCI'
+                elif re.search(r'repl', nl): ctype = 'SQL Replication'
+            elif 'MySQL/MariaDB' in apps and re.search(r'repl', nl): ctype = 'MySQL Replication'
+            elif 'PostgreSQL' in apps and re.search(r'repl|standby', nl): ctype = 'PG Replication'
+
+        # Signal 5: Annotation
+        if ann and _CLUSTER_ANN_KW.search(ann):
+            topo = 'Cluster'
+
+        # Signal 6: Explicit standalone overrides
+        if re.search(r'standalone|single[_-]?node', nl):
+            topo = 'Standalone'
+            ctype = None
+
+        # Determine type if still missing
+        if topo == 'Cluster' and not ctype:
+            if any(k in nl for k in ('ocp', 'openshift')): ctype = 'OpenShift'
+            elif any(k in nl for k in ('k8s', 'kube')): ctype = 'Kubernetes'
+            elif 'pacemaker' in nl or nl.startswith('pcs'): ctype = 'Pacemaker HA'
+            elif 'cohesity' in nl: ctype = 'Cohesity'
+            elif 'isilon' in nl: ctype = 'Isilon'
+            elif re.search(r'wsfc|wincluster|win.*cluster', nl): ctype = 'Windows WSFC'
+
+        vm['topology'] = topo
+        vm['cluster_group'] = cgroup
+        vm['cluster_role'] = crole
+        vm['cluster_type'] = ctype
+
+
 def get_all_data():
     all_vms=[];all_hosts=[];all_ds=[];all_nets=[];all_snaps=[];all_summ=[]
     for vc in VCENTERS:
@@ -349,6 +513,10 @@ def get_all_data():
             except Exception:
                 for v in vms:
                     v.setdefault("tags", [])
+            # Detect applications for each VM
+            for v in vms:
+                v["applications"] = _detect_applications(v)
+            _detect_topology_for_all(vms)
             hosts = _hosts(si,      vid, vname)
             ds    = _datastores(si, vid, vname)
             nets  = _networks(si,   vid, vname)

@@ -7,6 +7,7 @@ import {
   fetchDatastores, fetchNetworks,
   fetchMigrationPlans, createMigrationPlan, deleteMigrationPlan, updatePlanStatus, executeMigrationPlan, fetchPlanEvents, runPreflightCheck,
   fetchMoveGroups, createMoveGroup, deleteMoveGroup, addVMsToGroup, removeVMFromGroup, migrateGroup,
+  getToken,
 } from "./api";
 
 /* ============================================================
@@ -57,6 +58,78 @@ function Toast({ msg, type, onClose }) {
   );
 }
 
+
+function AapDropdown({ value, onSelect, p }) {
+  const [list, setList] = useState([]);
+  const [ld, setLd] = useState(true);
+  useEffect(() => {
+    fetch("/api/ansible/instances", { headers: { Authorization: "Bearer " + getToken() } })
+      .then(r => r.json())
+      .then(d => { setList((d.instances || []).filter(i => i.status === "ok")); setLd(false); })
+      .catch(() => setLd(false));
+  }, []);
+  return (
+    <div>
+      <label style={{ fontSize: 11.5, fontWeight: 700, color: p.textMute, marginBottom: 6, display: "block" }}>AAP Instance</label>
+      {ld ? <div style={{ color: p.textMute, fontSize: 12, padding: 8 }}>Loading instances...</div> :
+       list.length === 0 ? <div style={{ color: "#f59e0b", fontSize: 12, padding: 8 }}>No AAP instances configured.</div> :
+       <select value={value || ""} onChange={e => onSelect(e.target.value)}
+         style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 13 }}>
+         <option value="">-- Select AAP Instance ({list.length} available) --</option>
+         {list.map(i => <option key={i.id} value={String(i.id)}>{i.name} ({i.url}) - {i.env}</option>)}
+       </select>}
+    </div>
+  );
+}
+
+function PlaybookDropdown({ aapId, groupId, value, onSelect, p }) {
+  const [list, setList] = useState([]);
+  const [ld, setLd] = useState(false);
+  const [q, setQ] = useState("");
+  const [debounceTimer, setDebounceTimer] = useState(null);
+  const doSearch = (searchTerm) => {
+    if (!aapId) return;
+    setLd(true);
+    const url = "/api/migration/move-groups/" + groupId + "/post-tasks/playbooks?aap_id=" + aapId + (searchTerm ? "&search=" + encodeURIComponent(searchTerm) : "");
+    fetch(url, { headers: { Authorization: "Bearer " + getToken() } })
+      .then(r => r.json())
+      .then(d => { setList(d.playbooks || []); setLd(false); })
+      .catch(() => { setList([]); setLd(false); });
+  };
+  useEffect(() => {
+    if (!aapId) { setList([]); setQ(""); return; }
+    setQ(""); setList([]);
+  }, [aapId, groupId]);
+  const handleSearch = (val) => {
+    setQ(val);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (val.length >= 2) {
+      setDebounceTimer(setTimeout(() => doSearch(val), 400));
+    } else {
+      setList([]);
+    }
+  };
+  if (!aapId) return null;
+  return (
+    <div>
+      <label style={{ fontSize: 11.5, fontWeight: 700, color: p.textMute, marginBottom: 6, display: "block" }}>
+        Playbook / Job Template {ld && "(searching...)"}
+      </label>
+      <input placeholder="Type 2+ chars to search playbooks..." value={q} onChange={e => handleSearch(e.target.value)}
+        style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 12, marginBottom: 6, boxSizing: "border-box" }} />
+      {ld ? <div style={{ color: p.textMute, fontSize: 12, padding: 8 }}>Searching...</div> :
+       list.length > 0 ? (
+         <select value={value || ""} onChange={e => onSelect(e.target.value)}
+           style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 13 }}
+           size={Math.min(list.length + 1, 12)}>
+           <option value="">-- {list.length} playbooks found --</option>
+           {list.map(pb => <option key={pb.aap_instance_id + ":" + pb.id} value={pb.aap_instance_id + ":" + pb.id}>{pb.name}{pb.playbook ? " (" + pb.playbook + ")" : ""}</option>)}
+         </select>
+       ) : q.length >= 2 ? <div style={{ color: p.textMute, fontSize: 12, padding: 8 }}>No playbooks found</div> : null}
+    </div>
+  );
+}
+
 export default function MigrationPage({ currentUser, p }) {
   const [tab, setTab] = useState("new"); // "new" | "plans"
   const [step, setStep] = useState(0);
@@ -69,6 +142,11 @@ export default function MigrationPage({ currentUser, p }) {
   const [selHost, setSelHost] = useState("");
   const [allVMs, setAllVMs] = useState([]);
   const [vmSearch, setVmSearch] = useState("");
+  const [fPower, setFPower] = useState("");
+  const [fOS, setFOS] = useState("");
+  const [fTag, setFTag] = useState("");
+  const [fApp, setFApp] = useState("");
+  const hasFilters = fPower || fOS || fTag || fApp;
   const [selVMs, setSelVMs] = useState({});
   const skipVCEffectRef = useRef(false);
   const [loadingVMs, setLoadingVMs] = useState(false);
@@ -101,6 +179,18 @@ export default function MigrationPage({ currentUser, p }) {
   // Move Groups state
   const [moveGroups, setMoveGroups] = useState([]);
   const [mgLoading, setMgLoading] = useState(false);
+  // Post-Migration Tasks
+  const [ptGroupId, setPtGroupId] = useState(null);
+  const [ptTaskType, setPtTaskType] = useState("playbook");
+  const [ptSelAapInst, setPtSelAapInst] = useState("");
+  const [ptSelTemplate, setPtSelTemplate] = useState("");
+  const [ptTaskName, setPtTaskName] = useState("");
+  const [ptCustomScript, setPtCustomScript] = useState("");
+  const [ptExtraVars, setPtExtraVars] = useState("");
+  const [ptRunning, setPtRunning] = useState(false);
+  const [ptTasks, setPtTasks] = useState([]);
+  const [ptExpandedTask, setPtExpandedTask] = useState(null);
+
   const [mgName, setMgName] = useState("");
   const [mgExpanded, setMgExpanded] = useState(null);
   const [mgAddVC, setMgAddVC] = useState("");
@@ -176,6 +266,49 @@ export default function MigrationPage({ currentUser, p }) {
     setMgLoading(false);
   }
 
+  async function openPostTasks(gid) {
+    setPtGroupId(gid); setPtTasks([]);
+    setPtTaskType("playbook"); setPtSelAapInst(""); setPtSelTemplate("");
+    setPtTaskName(""); setPtCustomScript(""); setPtExtraVars("");
+    try {
+      const r = await fetch("/api/migration/move-groups/" + gid + "/post-tasks",
+        { headers: { Authorization: "Bearer " + getToken() } });
+      const d = await r.json();
+      setPtTasks(d.tasks || []);
+    } catch (e) { console.error("post-tasks load err", e); }
+  }
+
+  async function runPostTask() {
+    if (!ptTaskName.trim()) return showToast("Enter a task name", "error");
+    if (ptTaskType === "playbook" && !ptSelTemplate) return showToast("Select a playbook", "error");
+    setPtRunning(true);
+    try {
+      const body = { task_name: ptTaskName, task_type: ptTaskType };
+      if (ptTaskType === "playbook") {
+        const [aapId, tplId] = ptSelTemplate.split(":");
+        body.aap_instance_id = parseInt(aapId);
+        body.template_id = parseInt(tplId);
+        if (ptExtraVars.trim()) body.extra_vars = JSON.parse(ptExtraVars);
+      } else { body.script = ptCustomScript; }
+      const r = await fetch("/api/migration/move-groups/" + ptGroupId + "/post-tasks/run",
+        { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + getToken() }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (d.error) showToast(d.error, "error");
+      else { showToast("Task started!", "success"); openPostTasks(ptGroupId); }
+    } catch (e) { showToast("Failed: " + e.message, "error"); }
+    setPtRunning(false);
+  }
+
+  async function refreshPostTaskStatus(tid) {
+    try {
+      const r = await fetch("/api/migration/move-groups/post-tasks/" + tid,
+        { headers: { Authorization: "Bearer " + getToken() } });
+      const d = await r.json();
+      setPtTasks(prev => prev.map(t => t.id === tid ? { ...t, ...d } : t));
+    } catch (e) {}
+  }
+
+
   async function handleCreateGroup() {
     if (!mgName.trim()) return;
     try {
@@ -247,7 +380,11 @@ export default function MigrationPage({ currentUser, p }) {
   // Derived
   const filteredVMs = allVMs
     .filter(v => !selHost || v.host === selHost)
-    .filter(v => !vmSearch || v.name?.toLowerCase().includes(vmSearch.toLowerCase()) || v.guest_os?.toLowerCase().includes(vmSearch.toLowerCase()) || v.ip?.toLowerCase().includes(vmSearch.toLowerCase()) || (Array.isArray(v.tags) && v.tags.some(t => t.toLowerCase().includes(vmSearch.toLowerCase()))));
+    .filter(v => !vmSearch || v.name?.toLowerCase().includes(vmSearch.toLowerCase()) || v.guest_os?.toLowerCase().includes(vmSearch.toLowerCase()) || v.ip?.toLowerCase().includes(vmSearch.toLowerCase()) || (Array.isArray(v.tags) && v.tags.some(t => t.toLowerCase().includes(vmSearch.toLowerCase()))))
+    .filter(v => !fPower || (fPower === "on" ? (v.power_state || "").toLowerCase().includes("on") : (v.power_state || "").toLowerCase().includes("off")))
+    .filter(v => !fOS || (v.guest_os || "") === fOS)
+    .filter(v => !fTag || (Array.isArray(v.tags) && v.tags.some(t => (typeof t === "string" ? t : t.tag || "").includes(fTag))))
+    .filter(v => !fApp || (Array.isArray(v.applications) && v.applications.some(a => (typeof a === "string" ? a : a.app || "") === fApp)));
   const selectedVMList = allVMs.filter(v => selVMs[v.moid || v.name]);
   const selCount = selectedVMList.length;
   const totalCPU = selectedVMList.reduce((s, v) => s + (v.cpu || 0), 0);
@@ -601,6 +738,8 @@ export default function MigrationPage({ currentUser, p }) {
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: p.textSub, marginBottom: 4, display: "block" }}>Search VMs</label>
                 <input value={vmSearch} onChange={e => setVmSearch(e.target.value)} placeholder="Filter by name or OS..." style={inputStyle} />
+                {hasFilters && <button onClick={() => {setFPower("");setFOS("");setFTag("");setFApp("");}} style={{marginLeft:8,padding:"6px 14px",borderRadius:8,border:"1px solid "+p.accent,background:"transparent",color:p.accent,fontSize:11.5,fontWeight:700,cursor:"pointer",letterSpacing:".5px"}}>Clear Filters</button>}
+                {hasFilters && <button onClick={() => {setFPower("");setFOS("");setFTag("");setFApp("");}} style={{marginLeft:8,padding:"6px 14px",borderRadius:8,border:"1px solid "+p.accent,background:"transparent",color:p.accent,fontSize:11.5,fontWeight:700,cursor:"pointer",letterSpacing:".5px"}}>Clear Filters</button>}
               </div>
             </div>
 
@@ -625,13 +764,14 @@ export default function MigrationPage({ currentUser, p }) {
                       <tr>
                         <th style={thStyle}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>
                         <th style={thStyle}>VM Name</th>
-                        <th style={thStyle}>Power</th>
+                        <th style={thStyle}><div style={{display:"flex",alignItems:"center",gap:6}}>Power <select value={fPower} onChange={e=>setFPower(e.target.value)} style={{padding:"2px 4px",borderRadius:5,border:"1px solid "+p.border,background:p.bg,color:p.text,fontSize:10,width:60}}><option value="">All</option><option value="on">On</option><option value="off">Off</option></select></div></th>
                         <th style={thStyle}>CPU</th>
                         <th style={thStyle}>RAM (GB)</th>
                         <th style={thStyle}>Disk (GB)</th>
-                        <th style={thStyle}>Guest OS</th>
+                        <th style={thStyle}><div style={{display:"flex",alignItems:"center",gap:6}}>Guest OS <select value={fOS} onChange={e=>setFOS(e.target.value)} style={{padding:"2px 4px",borderRadius:5,border:"1px solid "+p.border,background:p.bg,color:p.text,fontSize:10,maxWidth:120}}><option value="">All</option>{[...new Set(allVMs.map(v=>v.guest_os||"").filter(Boolean))].sort().map(v=><option key={v} value={v}>{v}</option>)}</select></div></th>
                         <th style={thStyle}>IP Address</th>
-                        <th style={thStyle}>VM Tags</th>
+                        <th style={thStyle}><div style={{display:"flex",alignItems:"center",gap:6}}>VM Tags <select value={fTag} onChange={e=>setFTag(e.target.value)} style={{padding:"2px 4px",borderRadius:5,border:"1px solid "+p.border,background:p.bg,color:p.text,fontSize:10,maxWidth:100}}><option value="">All</option>{[...new Set(allVMs.flatMap(v=>Array.isArray(v.tags)?v.tags.map(t=>typeof t==="string"?t:t.tag||""):[]).filter(Boolean))].sort().map(v=><option key={v} value={v}>{v}</option>)}</select></div></th>
+                        <th style={thStyle}><div style={{display:"flex",alignItems:"center",gap:6}}>Applications <select value={fApp} onChange={e=>setFApp(e.target.value)} style={{padding:"2px 4px",borderRadius:5,border:"1px solid "+p.border,background:p.bg,color:p.text,fontSize:10,maxWidth:100}}><option value="">All</option>{[...new Set(allVMs.flatMap(v=>Array.isArray(v.applications)?v.applications.map(a=>typeof a==="string"?a:a.app||""):[]).filter(Boolean))].sort().map(v=><option key={v} value={v}>{v}</option>)}</select></div></th>
                         <th style={thStyle}>ESXi Host</th>
                       </tr>
                     </thead>
@@ -653,7 +793,8 @@ export default function MigrationPage({ currentUser, p }) {
                             <td style={tdStyle}>{vm.disk_gb ? parseFloat(vm.disk_gb).toFixed(1) : "-"}</td>
                             <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500 }}>{vm.guest_os || "-"}</td>
                             <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500, fontFamily: "monospace" }}>{vm.ip || "-"}</td>
-                            <td style={{ ...tdStyle, fontSize: 11, fontWeight: 500 }}>{Array.isArray(vm.tags) && vm.tags.length ? vm.tags.join(", ") : "-"}</td>
+                            <td style={{ ...tdStyle, fontSize: 11, fontWeight: 500 }}>{Array.isArray(vm.tags) && vm.tags.length ? vm.tags.map(t => typeof t === "string" ? t : (t.tag || t.key || JSON.stringify(t))).join(", ") : "-"}</td>
+                            <td style={{ ...tdStyle, fontSize: 12 }}>{Array.isArray(vm.applications) && vm.applications.length ? vm.applications.map((a,i) => <span key={i} style={{display:"inline-block",padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:600,marginRight:4,marginBottom:2,background:"rgba(99,102,241,0.13)",color:"#818cf8"}}>{typeof a === "string" ? a : a.app}</span>) : "-"}</td>
                             <td style={{ ...tdStyle, fontSize: 12, fontWeight: 500 }}>{vm.host || "-"}</td>
                           </tr>
                         );
@@ -1122,6 +1263,10 @@ export default function MigrationPage({ currentUser, p }) {
                     style={{ padding: "7px 16px", borderRadius: 7, border: "none", background: g.vm_count ? "#10b981" : p.border, color: "#fff", fontWeight: 700, fontSize: 12, cursor: g.vm_count ? "pointer" : "default", opacity: g.vm_count ? 1 : 0.5 }}>
                     🚀 Migrate
                   </button>
+                  <button onClick={e => { e.stopPropagation(); openPostTasks(g.id); }} disabled={!g.vm_count}
+                    style={{ padding: "7px 14px", borderRadius: 7, border: "none", background: g.vm_count ? "#8b5cf6" : p.border, color: "#fff", fontWeight: 700, fontSize: 12, cursor: g.vm_count ? "pointer" : "default", opacity: g.vm_count ? 1 : 0.5 }}>
+                    ⚙️ Post-Tasks
+                  </button>
                   <button onClick={e => { e.stopPropagation(); handleDeleteGroup(g.id); }}
                     style={{ padding: "7px 12px", borderRadius: 7, border: "none", background: "#ef4444", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                     🗑
@@ -1392,6 +1537,75 @@ export default function MigrationPage({ currentUser, p }) {
         @keyframes ldDot { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
+      {/* POST-MIGRATION TASKS SLIDE-OUT PANEL */}
+      {ptGroupId && (
+        <div style={{ position: "fixed", top: 0, right: 0, width: 520, height: "100vh", background: p.surface, boxShadow: "-4px 0 30px rgba(0,0,0,.25)", zIndex: 1000, display: "flex", flexDirection: "column", borderLeft: "3px solid " + p.accent }}>
+          <div style={{ padding: "18px 22px", borderBottom: "1px solid " + p.border, display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 22 }}>⚙️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: p.text }}>Post-Migration Tasks</div>
+              <div style={{ fontSize: 11.5, color: p.textMute }}>Group #{ptGroupId}</div>
+            </div>
+            <button onClick={() => setPtGroupId(null)} style={{ background: "none", border: "none", color: p.textMute, fontSize: 22, cursor: "pointer", fontWeight: 700 }}>&times;</button>
+          </div>
+          <div style={{ flex: 1, overflow: "auto", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["playbook", "Ansible Playbook"], ["custom", "Custom Script"]].map(([val, label]) => (
+                <button key={val} onClick={() => setPtTaskType(val)}
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid " + (ptTaskType === val ? p.accent : p.border), background: ptTaskType === val ? p.accent + "18" : "transparent", color: ptTaskType === val ? p.accent : p.textMute, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <input value={ptTaskName} onChange={e => setPtTaskName(e.target.value)} placeholder="Task name (e.g. Install Monitoring Agent)"
+              style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 13, width: "100%", boxSizing: "border-box" }} />
+            {ptTaskType === "playbook" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <AapDropdown value={ptSelAapInst} onSelect={v => { setPtSelAapInst(v); setPtSelTemplate(""); }} p={p} />
+                <PlaybookDropdown aapId={ptSelAapInst} groupId={ptGroupId} value={ptSelTemplate} onSelect={v => setPtSelTemplate(v)} p={p} />
+              </div>
+            )}
+            {ptTaskType === "custom" && (
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: p.textMute, marginBottom: 6, display: "block" }}>Script (runs on each VM via SSH/WinRM)</label>
+                <textarea value={ptCustomScript} onChange={e => setPtCustomScript(e.target.value)} rows={6}
+                  placeholder="# Example: install agent"
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+              </div>
+            )}
+            {ptTaskType === "playbook" && (
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: p.textMute, marginBottom: 6, display: "block" }}>Extra Variables (JSON, optional)</label>
+                <textarea value={ptExtraVars} onChange={e => setPtExtraVars(e.target.value)} rows={3}
+                  placeholder='{"env": "production"}'
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1px solid " + p.border, background: p.bg, color: p.text, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
+              </div>
+            )}
+            <button onClick={runPostTask} disabled={ptRunning}
+              style={{ padding: "12px 20px", borderRadius: 8, border: "none", background: ptRunning ? p.border : "#10b981", color: "#fff", fontWeight: 800, fontSize: 14, cursor: ptRunning ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {ptRunning ? "Running..." : "▶ Execute on All VMs"}
+            </button>
+            {ptTasks.length > 0 && (
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: p.text, marginBottom: 10, borderTop: "1px solid " + p.border, paddingTop: 14 }}>Task History</div>
+                {ptTasks.map(t => {
+                  const sc = { running: "#3b82f6", successful: "#10b981", failed: "#ef4444", partial: "#f59e0b", pending: "#6b7280" };
+                  return (
+                    <div key={t.id} style={{ background: p.bg, borderRadius: 8, border: "1px solid " + p.border, marginBottom: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: sc[t.status] || "#6b7280", display: "inline-block" }}></span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12.5, color: p.text }}>{t.task_name}</div>
+                        <div style={{ fontSize: 10.5, color: p.textMute }}>{t.task_type} | {t.triggered_by} | {(t.started_at || "").slice(0,16)}</div>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: sc[t.status] || "#6b7280", textTransform: "uppercase" }}>{t.status}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

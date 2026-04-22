@@ -229,9 +229,10 @@ def get_aap_jobs(inst: dict, limit: int = 100) -> list:
     except Exception as e:
         raise RuntimeError(str(e))
 
-def get_aap_job_templates(inst: dict) -> list:
+def get_aap_job_templates(inst: dict, search=None) -> list:
     try:
-        items = _paginate(inst, "/api/v2/job_templates/")
+        params = {"search": search} if search else None
+        items = _paginate(inst, "/api/v2/job_templates/", params=params, max_items=10000)
         sf = lambda j, k: (j.get("summary_fields", {}).get(k) or {})
         return [{
             "id":              j.get("id"),
