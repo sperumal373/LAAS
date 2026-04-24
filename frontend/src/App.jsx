@@ -20270,12 +20270,12 @@ function Sidebar({page,setPage,vcenters,selectedVC,summaries,loading,error,alert
     <div className="sidebar">
       {/* Portal Header */}
       <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${p.border}`,background:`linear-gradient(180deg,#0d1829,${p.panel})`}}>
-        <div style={{display:"flex",alignItems:"center",gap:11}}>
-          <div style={{width:40,height:40,borderRadius:10,background:`linear-gradient(135deg,${p.accent},${p.cyan})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:25,flexShrink:0,boxShadow:`0 4px 14px ${p.accent}50`}}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{filter:"drop-shadow(0 0 3px rgba(255,255,255,0.6))"}}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="1" fill="white"/></svg></div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:64,height:64,borderRadius:12,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 2px 10px rgba(0,0,0,0.12)",overflow:"hidden"}}><img src="/wipro-logo.jpg" alt="Wipro" style={{width:58,height:58,objectFit:"contain"}} /></div>
           <div>
-            <div style={{fontWeight:800,fontSize:22,lineHeight:1.2,letterSpacing:"-.3px",fontSize:26,lineHeight:1.05,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Solution Sphere</div>
-            <div style={{fontSize:11.5,color:p.accent,marginTop:3,letterSpacing:"1.5px",fontWeight:700,textTransform:"uppercase"}}>CISS-COE Infrastructure</div>
-            <div style={{fontSize:11,color:p.textMute,marginTop:1,letterSpacing:".3px",fontWeight:400,fontStyle:"italic",opacity:0.65}}>Lab as a Service</div>
+            <div style={{fontWeight:800,fontSize:24,lineHeight:1.1,letterSpacing:"-.3px",fontSize:24,lineHeight:1.1,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Solution Sphere</div>
+            <div style={{fontSize:13,color:p.accent,marginTop:2,letterSpacing:"1px",fontWeight:700,textTransform:"uppercase"}}>CISS-COE Infrastructure</div>
+            <div style={{fontSize:14,color:p.cyan,marginTop:2,letterSpacing:".5px",fontWeight:700,fontStyle:"normal",opacity:1}}>Lab as a Service</div>
           </div>
         </div>
       </div>
