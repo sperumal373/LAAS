@@ -1326,11 +1326,14 @@ function CISReports() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CIS_TABS = [
-  { id: "dashboard", label: "📊 Dashboard" },
-  { id: "vmlist",    label: "🖥️ VM List" },
-  { id: "exclusions",label: "⊘ Exclusions" },
-  { id: "remlog",    label: "📋 Remediation Log" },
-  { id: "reports",   label: "📄 Reports" },
+  { id: "dashboard",   label: "📊 Dashboard" },
+  { id: "osgroups",    label: "🖥️ OS Groups" },
+  { id: "vmlist",      label: "📝 VM List" },
+  { id: "scanhistory", label: "🗂️ Scan History" },
+  { id: "baselines",   label: "📚 Baselines" },
+  { id: "exclusions",  label: "⊚ Exclusions" },
+  { id: "remlog",      label: "📋 Remediation Log" },
+  { id: "reports",     label: "📄 Reports" },
 ];
 
 export default function CISHardening({ currentUser }) {
@@ -1398,8 +1401,11 @@ export default function CISHardening({ currentUser }) {
 
       {/* Content */}
       <div>
-        {tab === "dashboard"  && <CISDashboard onViewVM={handleViewVM} />}
-        {tab === "vmlist"     && <CISVMList onSelectVM={handleViewVM} />}
+        {tab === "dashboard"   && <CISDashboard onViewVM={handleViewVM} />}
+        {tab === "osgroups"    && <CISOsGroups onViewVM={handleViewVM} />}
+        {tab === "vmlist"      && <CISVMList onSelectVM={handleViewVM} />}
+        {tab === "scanhistory" && <CISScanHistory />}
+        {tab === "baselines"   && <CISBaselines />}
         {tab === "vmdetail"   && selVM && <CISVMDetail vm={selVM} onBack={handleBack} />}
         {tab === "exclusions" && <CISExclusions />}
         {tab === "remlog"     && <CISRemLog />}

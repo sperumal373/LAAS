@@ -9175,6 +9175,198 @@ async def cis_benchmarks(u=Depends(require_role("admin","operator","viewer"))): 
     ]}
 
 
+
+#  CIS v2  OS Groups / Baselines / Bulk Remediation 
+
+from cis_scanner import bulk_remediate_vm, bulk_remediate_rule
+
+@app.get("/api/cis/os-groups")
+async def cis_os_groups(u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    CASE
+                        WHEN os_name ILIKE '%Red Hat%8%' OR os_name ILIKE '%RHEL%8%' THEN 'rhel8'
+                        WHEN os_name ILIKE '%Red Hat%9%' OR os_name ILIKE '%RHEL%9%' THEN 'rhel9'
+                        WHEN os_name ILIKE '%2016%' THEN 'win2016'
+                        WHEN os_name ILIKE '%2019%' THEN 'win2019'
+                        ELSE 'other'
+                    END AS os_key,
+                    COUNT(*) AS total_vms,
+                    SUM(CASE WHEN LOWER(power_state) IN ('on','poweredon','running') THEN 1 ELSE 0 END) AS powered_on,
+                    SUM(CASE WHEN LOWER(power_state) IN ('off','poweredoff','stopped','shutdown') THEN 1 ELSE 0 END) AS powered_off
+                FROM compliance_assets
+                WHERE is_active=TRUE AND (os_family='linux' OR os_family='windows')
+                  AND os_name NOT ILIKE '%router%' AND os_name NOT ILIKE '%switch%'
+                  AND os_name NOT ILIKE '%esxi%' AND os_name NOT ILIKE '%vmkernel%'
+                GROUP BY os_key ORDER BY os_key
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+            cur.execute("""
+                SELECT CASE
+                    WHEN benchmark ILIKE '%RHEL8%' OR benchmark ILIKE '%RHEL_8%' THEN 'rhel8'
+                    WHEN benchmark ILIKE '%RHEL9%' OR benchmark ILIKE '%RHEL_9%' THEN 'rhel9'
+                    WHEN benchmark ILIKE '%2016%' THEN 'win2016'
+                    WHEN benchmark ILIKE '%2019%' THEN 'win2019'
+                    ELSE 'other'
+                END AS os_key,
+                ROUND(AVG(score),1) AS avg_score, SUM(passed) AS total_passed,
+                SUM(failed) AS total_failed, MAX(scanned_at) AS last_scan
+                FROM cis_vm_scans GROUP BY os_key
+            """)
+            scan_stats = {r["os_key"]: dict(r) for r in cur.fetchall()}
+        conn.close()
+        for row in rows:
+            st = scan_stats.get(row["os_key"], {})
+            row["avg_score"] = st.get("avg_score")
+            row["total_passed"] = st.get("total_passed", 0)
+            row["total_failed"] = st.get("total_failed", 0)
+            row["last_scan"] = st.get("last_scan")
+        return {"os_groups": rows}
+    except Exception as ex:
+        return {"os_groups": [], "error": str(ex)}
+
+
+@app.get("/api/cis/os-groups/{os_key}/vms")
+async def cis_os_group_vms(os_key: str, page: int=1, page_size: int=50,
+                            search: str="", u=Depends(require_role("admin","operator","viewer"))):
+    OS_KEY_COND = {
+        "rhel8":   ("os_family='linux'",   "(os_name ILIKE '%Red Hat%8%' OR os_name ILIKE '%RHEL%8%')"),
+        "rhel9":   ("os_family='linux'",   "(os_name ILIKE '%Red Hat%9%' OR os_name ILIKE '%RHEL%9%')"),
+        "win2016": ("os_family='windows'", "os_name ILIKE '%2016%'"),
+        "win2019": ("os_family='windows'", "os_name ILIKE '%2019%'"),
+    }
+    try:
+        conn = _pg_cis()
+        cond = OS_KEY_COND.get(os_key, ("1=1","1=1"))
+        where = f"WHERE is_active=TRUE AND ({cond[0]}) AND ({cond[1]})"
+        params = []
+        if search:
+            where += " AND (hostname ILIKE %s OR ip_address ILIKE %s)"
+            params += [f"%{search}%", f"%{search}%"]
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM compliance_assets {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(f"""
+                SELECT a.id, a.hostname, a.ip_address, a.os_family, a.os_name, a.os_version, a.power_state,
+                       vs.id AS vm_scan_id, vs.score, vs.passed, vs.failed, vs.skipped, vs.scanned_at, vs.benchmark
+                FROM compliance_assets a
+                LEFT JOIN LATERAL (
+                    SELECT id, score, passed, failed, skipped, scanned_at, benchmark
+                    FROM cis_vm_scans WHERE asset_id=a.id ORDER BY scanned_at DESC LIMIT 1
+                ) vs ON TRUE
+                {where} ORDER BY a.hostname ASC LIMIT %s OFFSET %s
+            """, params + [page_size, (page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "page_size": page_size,
+                "pages": max(1,(total+page_size-1)//page_size), "vms": rows}
+    except Exception as ex:
+        return {"total": 0, "vms": [], "error": str(ex)}
+
+
+@app.get("/api/cis/scan-history")
+async def cis_scan_history(page: int=1, page_size: int=20, os_filter: str="",
+                            u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        conn = _pg_cis()
+        where = "WHERE os_filter=%s" if os_filter else ""
+        params = [os_filter] if os_filter else []
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM cis_scan_jobs {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(f"""
+                SELECT id, started_at, completed_at, triggered_by, status, os_filter,
+                       target_vms, scanned_vms, total_checks, passed_checks, failed_checks,
+                       skipped_checks, duration_sec, powered_on, powered_off, not_accessible, error_msg
+                FROM cis_scan_jobs {where} ORDER BY id DESC LIMIT %s OFFSET %s
+            """, params + [page_size, (page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "page_size": page_size,
+                "pages": max(1,(total+page_size-1)//page_size), "jobs": rows}
+    except Exception as ex:
+        return {"total": 0, "jobs": [], "error": str(ex)}
+
+
+@app.get("/api/cis/baselines/{os_key}")
+async def cis_baselines_list(os_key: str, page: int=1, page_size: int=100,
+                              search: str="", u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        conn = _pg_cis()
+        conds = ["os_key=%s"]; params = [os_key]
+        if search:
+            conds.append("(cis_id ILIKE %s OR title ILIKE %s)"); params += [f"%{search}%",f"%{search}%"]
+        where = "WHERE " + " AND ".join(conds)
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM cis_baselines {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(f"SELECT id,os_key,rule_id,cis_id,section,title,remediation,desired_value,enabled,updated_at FROM cis_baselines {where} ORDER BY cis_id LIMIT %s OFFSET %s", params+[page_size,(page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "pages": max(1,(total+page_size-1)//page_size), "rules": rows}
+    except Exception as ex:
+        return {"total": 0, "rules": [], "error": str(ex)}
+
+
+@app.patch("/api/cis/baselines/{baseline_id}")
+async def cis_baselines_update(baseline_id: int, request: Request, u=Depends(require_role("admin","operator"))):
+    try: body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"Invalid JSON"})
+    allowed = {"enabled","title","remediation","desired_value"}
+    updates = {k:v for k,v in body.items() if k in allowed}
+    if not updates:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"No valid fields"})
+    try:
+        conn = _pg_cis(); sets = ", ".join(f"{k}=%s" for k in updates)
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE cis_baselines SET {sets},updated_at=NOW() WHERE id=%s RETURNING id", list(updates.values())+[baseline_id])
+            row = cur.fetchone()
+        conn.commit(); conn.close()
+        if not row:
+            from fastapi.responses import JSONResponse; return JSONResponse(status_code=404,content={"error":"Not found"})
+        return {"success": True, "id": row["id"]}
+    except Exception as ex:
+        return {"success": False, "error": str(ex)}
+
+
+@app.post("/api/cis/baselines/reimport")
+async def cis_baselines_reimport(u=Depends(require_role("admin"))):
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["C:/caas-dashboard/backend/venv/Scripts/python.exe","C:/caas-dashboard/backend/cis_baselines_importer.py"],
+            capture_output=True, text=True, timeout=120)
+        return {"success": result.returncode==0, "stdout": result.stdout[-2000:], "stderr": result.stderr[-1000:]}
+    except Exception as ex:
+        return {"success": False, "error": str(ex)}
+
+
+@app.post("/api/cis/remediate/bulk-vm")
+async def cis_bulk_remediate_vm(request: Request, u=Depends(require_role("admin","operator"))):
+    try: body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"Invalid JSON"})
+    vm_scan_id = body.get("vm_scan_id")
+    if not vm_scan_id:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"vm_scan_id required"})
+    return bulk_remediate_vm(vm_scan_id, performed_by=u.get("username","system"), dry_run=bool(body.get("dry_run",False)))
+
+
+@app.post("/api/cis/remediate/bulk-rule")
+async def cis_bulk_remediate_rule(request: Request, u=Depends(require_role("admin"))):
+    try: body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"Invalid JSON"})
+    cis_id = body.get("cis_id","")
+    if not cis_id:
+        from fastapi.responses import JSONResponse; return JSONResponse(status_code=400,content={"error":"cis_id required"})
+    return bulk_remediate_rule(cis_id, os_key=body.get("os_key"), performed_by=u.get("username","system"), dry_run=bool(body.get("dry_run",False)))
+
+
 # === ZERTO DISASTER RECOVERY ROUTES ===
 from zerto_client import (
     init_zerto_db, list_sites as z_list_sites, get_site as z_get_site,
@@ -9399,3 +9591,4 @@ def api_zerto_mv(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_curre
 @app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/failback")
 def api_zerto_fb(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
     return failback_vpg(site_id, vpg_id, body.get("vpg_name",""), body)
+

@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solution Sphere - CISS-COE Unified Infrastructure Dashboard</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Exo+2:wght@300;400;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{overflow:hidden;width:100vw;height:100vh;background:#050810;font-family:'Rajdhani',sans-serif;color:#fff}
+
+/* ============ DATACENTER BACKGROUND ============ */
+.scene{position:fixed;inset:0;z-index:0}
+
+/* Dark datacenter base */
+.dc-base{position:absolute;inset:0;background:linear-gradient(180deg,#060d1a 0%,#0a1020 40%,#0d1525 60%,#0a0f1a 100%)}
+
+/* Server racks - left */
+.rack{position:absolute;top:0;height:100%;width:140px;z-index:1}
+.rack.L{left:0}.rack.R{right:0}
+.rack-inner{width:100%;height:100%;position:relative}
+.rack-col{position:absolute;top:2%;height:96%;width:55px;background:linear-gradient(180deg,#0a0f18,#080d15);
+  border:1px solid rgba(0,229,255,.04);border-radius:3px;overflow:hidden}
+.rack.L .rack-col:nth-child(1){left:10px}
+.rack.L .rack-col:nth-child(2){left:72px}
+.rack.R .rack-col:nth-child(1){right:10px}
+.rack.R .rack-col:nth-child(2){right:72px}
+.ru{width:90%;height:12px;margin:2px auto;background:rgba(15,25,40,.9);border:1px solid rgba(0,229,255,.03);
+  border-radius:1px;display:flex;align-items:center;padding:0 3px;gap:2px}
+.ru .led{width:2px;height:2px;border-radius:50%;animation:blink 2s infinite}
+.led.g{background:#00e676;box-shadow:0 0 3px #00e676}.led.c{background:#00bcd4;box-shadow:0 0 3px #00bcd4}
+.led.o{background:#ff9100;box-shadow:0 0 3px #ff9100}.led.r{background:#f44336;box-shadow:0 0 3px #f44336}
+.led.b{background:#2196f3;box-shadow:0 0 3px #2196f3}
+.ru:nth-child(odd) .led{animation-delay:.5s}
+.ru:nth-child(3n) .led{animation-delay:1s}
+.ru:nth-child(5n) .led{animation-delay:.3s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+
+/* Colored glow reflections on racks (like reference image) */
+.rack-glow{position:absolute;width:100%;height:100%;z-index:2;pointer-events:none}
+.rack.L .rack-glow{background:linear-gradient(90deg,rgba(0,229,255,.06) 0%,rgba(124,77,255,.04) 50%,transparent 100%)}
+.rack.R .rack-glow{background:linear-gradient(-90deg,rgba(0,230,118,.05) 0%,rgba(255,109,0,.04) 50%,transparent 100%)}
+
+/* Floor with perspective grid */
+.floor{position:absolute;bottom:0;left:0;width:100%;height:45%;perspective:800px;z-index:1}
+.floor-grid{position:absolute;bottom:0;left:5%;width:90%;height:100%;
+  background:
+    repeating-linear-gradient(90deg,rgba(0,229,255,.015) 0px,transparent 1px,transparent 80px),
+    repeating-linear-gradient(0deg,rgba(0,229,255,.012) 0px,transparent 1px,transparent 40px);
+  transform:rotateX(60deg);transform-origin:bottom center}
+.floor-glow{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:600px;height:80px;
+  background:radial-gradient(ellipse,rgba(0,229,255,.12) 0%,rgba(124,77,255,.04) 40%,transparent 70%);border-radius:50%;z-index:2}
+
+/* Rainbow/aurora energy streams (key feature from reference) */
+.aurora{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0;mix-blend-mode:screen}
+.aurora-band{position:absolute;height:3px;border-radius:2px;filter:blur(8px);opacity:.4}
+.aurora-band.a1{top:28%;left:5%;width:90%;background:linear-gradient(90deg,transparent,#ff4081,#ff9100,#ffeb3b,#00e676,#00bcd4,#7c4dff,transparent);
+  animation:auroraFlow 6s ease-in-out infinite}
+.aurora-band.a2{top:45%;left:10%;width:80%;background:linear-gradient(90deg,transparent,#00e5ff,#7c4dff,#ff4081,#ff6d00,transparent);
+  animation:auroraFlow 8s ease-in-out infinite reverse;filter:blur(12px);height:5px;opacity:.25}
+.aurora-band.a3{top:62%;left:3%;width:94%;background:linear-gradient(90deg,transparent,#00e676,#00bcd4,#2196f3,#7c4dff,#e040fb,transparent);
+  animation:auroraFlow 7s ease-in-out infinite;filter:blur(6px);opacity:.3}
+@keyframes auroraFlow{0%,100%{transform:translateX(-5%) scaleX(.95);opacity:.2}50%{transform:translateX(5%) scaleX(1.05);opacity:.5}}
+
+/* Colorful nebula glow around center */
+.nebula{position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);width:500px;height:400px;z-index:2;pointer-events:none;opacity:0}
+.nebula-layer{position:absolute;border-radius:50%;filter:blur(60px);mix-blend-mode:screen;animation:nebulaRot 10s linear infinite}
+.nebula-layer.n1{inset:0;background:radial-gradient(ellipse,rgba(0,229,255,.15),transparent 60%)}
+.nebula-layer.n2{inset:10%;background:radial-gradient(ellipse at 30% 40%,rgba(124,77,255,.12),transparent 55%);animation-duration:14s;animation-direction:reverse}
+.nebula-layer.n3{inset:5%;background:radial-gradient(ellipse at 70% 60%,rgba(255,64,129,.08),transparent 50%);animation-duration:12s}
+.nebula-layer.n4{inset:15%;background:radial-gradient(ellipse at 40% 30%,rgba(255,145,0,.06),transparent 45%);animation-duration:16s;animation-direction:reverse}
+.nebula-layer.n5{inset:20%;background:radial-gradient(ellipse,rgba(0,230,118,.06),transparent 50%);animation-duration:18s}
+@keyframes nebulaRot{to{transform:rotate(360deg)}}
+
+/* Metallic pedestal/platform at bottom */
+.pedestal{position:absolute;bottom:8%;left:50%;transform:translateX(-50%);z-index:5;opacity:0}
+.pedestal-top{width:300px;height:20px;background:linear-gradient(180deg,rgba(100,120,140,.3),rgba(60,70,80,.2));
+  border-radius:50%;border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 0 40px rgba(0,229,255,.08),inset 0 -2px 10px rgba(0,0,0,.3)}
+.pedestal-ring{width:350px;height:25px;margin:-5px auto 0;background:transparent;
+  border-radius:50%;border:1px solid rgba(0,229,255,.1)}
+.pedestal-ring2{width:400px;height:30px;margin:-5px auto 0;background:transparent;
+  border-radius:50%;border:1px solid rgba(0,229,255,.05)}
+
+/* Vignette */
+.vig{position:absolute;inset:0;z-index:4;
+  background:radial-gradient(ellipse at center,transparent 35%,rgba(0,5,15,.75) 100%);pointer-events:none}
+
+/* ============ 3D CANVAS ============ */
+canvas#bg{position:fixed;inset:0;z-index:6}
+
+/* ============ UI OVERLAY ============ */
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none}
+
+/* Title at top */
+.title{position:absolute;top:10px;left:50%;transform:translateX(-50%);text-align:center;opacity:0;z-index:20;white-space:nowrap}
+.title .line1{font-family:'Orbitron';font-size:22px;font-weight:700;color:#fff;letter-spacing:3px;
+  text-shadow:0 0 20px rgba(0,229,255,.4),0 2px 4px rgba(0,0,0,.6)}
+.title .line2{font-family:'Orbitron';font-size:40px;font-weight:900;line-height:1;margin-top:2px;
+  background:linear-gradient(135deg,#00e5ff,#7c4dff,#00e5ff);background-size:200% 200%;
+  animation:gs 4s ease infinite;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 4px 15px rgba(0,229,255,.3))}
+@keyframes gs{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.title .line3{font-family:'Orbitron';font-size:14px;color:rgba(255,255,255,.5);letter-spacing:4px;font-weight:400}
+
+/* Migration banner below title */
+.mig-banner{position:absolute;top:92px;left:50%;transform:translateX(-50%);opacity:0;z-index:20;text-align:center}
+.mig-banner .box{display:inline-block;background:rgba(0,20,40,.8);border:1px solid rgba(0,229,255,.3);
+  border-radius:8px;padding:6px 20px;backdrop-filter:blur(8px)}
+.mig-banner .box h3{font-family:'Orbitron';font-size:11px;letter-spacing:2px;
+  color:#fff;text-shadow:0 0 8px rgba(0,229,255,.4)}
+.mig-banner .box h3 .hl{color:#00e5ff}
+.mig-banner .box h3 .arr{color:#00e676;margin:0 4px}
+.mig-banner .box h3 .yl{color:#ffeb3b}
+.mig-banner .box p{font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;margin-top:1px}
+
+/* Center sphere label */
+.sph-lbl{position:absolute;top:50%;left:50%;transform:translate(-50%,-55%);text-align:center;opacity:0;z-index:12}
+.sph-lbl h2{font-family:'Orbitron';font-size:28px;font-weight:700;color:#fff;letter-spacing:5px;
+  text-shadow:0 0 30px rgba(0,229,255,.7),0 0 60px rgba(124,77,255,.4),0 0 90px rgba(0,229,255,.2)}
+
+/* ===== Floating labels (like reference) ===== */
+.flbl{position:absolute;font-family:'Orbitron';font-size:11px;letter-spacing:3px;text-transform:uppercase;
+  opacity:0;z-index:14;pointer-events:none}
+.flbl.cyan{color:rgba(0,229,255,.7);text-shadow:0 0 10px rgba(0,229,255,.3)}
+.flbl.green{color:rgba(0,230,118,.7);text-shadow:0 0 10px rgba(0,230,118,.3)}
+.flbl.yellow{color:rgba(255,235,59,.6);text-shadow:0 0 10px rgba(255,235,59,.2)}
+.flbl.white{color:rgba(255,255,255,.5);text-shadow:0 0 8px rgba(255,255,255,.2)}
+
+/* ===== Feature panels ===== */
+.fp{position:absolute;opacity:0;z-index:15;pointer-events:none}
+
+/* CLOUD - top left-center with cloud shape */
+.fp.cloud{top:17%;left:26%}
+.cloud-shape{position:relative;width:130px;height:80px}
+.cloud-body{position:absolute;bottom:0;left:10px;width:110px;height:50px;background:linear-gradient(135deg,#FF9900,#e68900);
+  border-radius:25px;display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 4px 25px rgba(255,153,0,.3)}
+.cloud-bump{position:absolute;top:0;left:30px;width:60px;height:45px;background:linear-gradient(135deg,#FF9900,#e68900);
+  border-radius:50%;box-shadow:0 -5px 20px rgba(255,153,0,.2)}
+.cloud-body .logo-text{font-family:'Rajdhani';font-weight:700;font-size:16px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.3)}
+.cloud-body .os-icon{width:28px;height:28px;background:#EE0000;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;color:#fff;box-shadow:0 2px 8px rgba(238,0,0,.4)}
+
+/* VIRTUALIZATION - top right */
+.fp.virt{top:16%;right:12%}
+.virt-box{display:flex;gap:8px}
+.v-card{background:rgba(8,18,40,.9);border:1px solid rgba(255,255,255,.12);border-radius:10px;
+  padding:10px 12px;text-align:center;backdrop-filter:blur(10px);min-width:72px;
+  box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.v-card .name{font-family:'Orbitron';font-size:10px;font-weight:600;letter-spacing:1px;margin-bottom:4px}
+.v-card .sub{font-size:8px;color:rgba(255,255,255,.35);letter-spacing:1px}
+.v-card.vmw{border-color:rgba(113,125,181,.3)}.v-card.vmw .name{color:#a0aaf0}
+.v-card.ntnx{border-color:rgba(2,77,161,.3)}.v-card.ntnx .name{color:#4da6ff}
+.v-card.hv{border-color:rgba(0,164,239,.3)}.v-card.hv .name{color:#00a4ef}
+
+/* IPAM - left side, dark panel with tree diagram */
+.fp.ipam{top:33%;left:4%}
+.ipam-panel{background:rgba(8,15,30,.92);border:1px solid rgba(0,229,255,.12);border-radius:12px;
+  padding:14px 16px;width:175px;backdrop-filter:blur(12px);box-shadow:0 4px 30px rgba(0,0,0,.5)}
+.ipam-panel h3{font-family:'Orbitron';font-size:9px;color:#00e5ff;letter-spacing:2px;margin-bottom:10px}
+.ipam-tree{display:flex;flex-direction:column;align-items:center}
+.ipam-tree .node{background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);border-radius:4px;
+  padding:2px 8px;font-size:8px;color:#00e5ff;font-weight:600;letter-spacing:1px}
+.ipam-tree .vline{width:1px;height:8px;background:rgba(0,229,255,.25)}
+.ipam-tree .hline{width:80px;height:1px;background:rgba(0,229,255,.2);margin-top:0}
+.ipam-tree .row{display:flex;gap:6px;align-items:flex-start}
+.ipam-tree .col{display:flex;flex-direction:column;align-items:center}
+.ipam-tree .icon-node{width:28px;height:28px;border:1px solid rgba(0,229,255,.15);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:14px;background:rgba(0,229,255,.03)}
+.ipam-tree .icon-label{font-size:7px;color:rgba(255,255,255,.4);margin-top:2px;letter-spacing:.5px}
+
+/* STORAGE - bottom left, server rack boxes */
+.fp.stor{bottom:15%;left:24%}
+.stor-rack{display:flex;gap:4px}
+.stor-box{width:48px;height:65px;border-radius:4px;border:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:4px 2px;
+  box-shadow:0 4px 20px rgba(0,0,0,.4),inset 0 0 20px rgba(0,0,0,.2)}
+.stor-box .drives{display:flex;gap:2px;margin-bottom:4px}
+.stor-box .drives i{display:block;width:4px;height:20px;border-radius:1px}
+.stor-box .lbl{font-family:'Orbitron';font-size:6px;letter-spacing:1px;text-align:center;line-height:1.3}
+.stor-box.hpe{background:linear-gradient(180deg,#1a1a1a 0%,#0d2818 100%);border-color:rgba(0,200,83,.2)}
+.stor-box.hpe .drives i{background:rgba(0,200,83,.3)}.stor-box.hpe .drives i:nth-child(odd){background:rgba(0,200,83,.5)}
+.stor-box.hpe .lbl{color:#00c853}
+.stor-box.na{background:linear-gradient(180deg,#1a1a1a 0%,#0d1528 100%);border-color:rgba(0,103,197,.2)}
+.stor-box.na .drives i{background:rgba(0,103,197,.3)}.stor-box.na .drives i:nth-child(odd){background:rgba(0,103,197,.5)}
+.stor-box.na .lbl{color:#0067c5}
+.stor-box.dell{background:linear-gradient(180deg,#1a1a1a 0%,#1a1520 100%);border-color:rgba(0,123,184,.2)}
+.stor-box.dell .drives i{background:rgba(0,123,184,.3)}.stor-box.dell .drives i:nth-child(odd){background:rgba(0,123,184,.5)}
+.stor-box.dell .lbl{color:#007db8}
+
+/* DATA PROTECTION - bottom right, glowing panel */
+.fp.bkp{bottom:15%;right:15%}
+.bkp-panel{background:rgba(8,18,35,.9);border:1px solid rgba(0,179,136,.2);border-radius:14px;
+  padding:14px 18px;backdrop-filter:blur(12px);box-shadow:0 0 30px rgba(0,179,136,.08),0 4px 25px rgba(0,0,0,.4)}
+.bkp-panel h3{font-family:'Orbitron';font-size:9px;color:#26bfa6;letter-spacing:2px;margin-bottom:8px}
+.bkp-row{display:flex;gap:14px;align-items:center}
+.bkp-item{text-align:center}
+.bkp-item .ring{width:44px;height:44px;border-radius:50%;border:2px solid;display:flex;align-items:center;
+  justify-content:center;font-size:18px;margin:0 auto 4px;position:relative}
+.bkp-item .ring::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid;opacity:.3}
+.bkp-item .name{font-family:'Orbitron';font-size:9px;font-weight:600;letter-spacing:1px}
+
+/* INSIGHTS - right side, monitor-like panel */
+.fp.ins{top:32%;right:3%}
+.ins-monitor{background:rgba(8,15,28,.95);border:1px solid rgba(255,109,0,.15);border-radius:10px;
+  padding:12px 14px;width:200px;backdrop-filter:blur(10px);
+  box-shadow:0 0 25px rgba(255,109,0,.06),0 4px 25px rgba(0,0,0,.5)}
+.ins-monitor .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.ins-monitor .topbar h3{font-family:'Orbitron';font-size:8px;color:#ff9100;letter-spacing:1.5px}
+.ins-monitor .topbar .dots{display:flex;gap:3px}
+.ins-monitor .topbar .dots span{width:5px;height:5px;border-radius:50%}
+.ins-charts{display:flex;gap:10px}
+.ins-heatmap{display:grid;grid-template-columns:repeat(5,12px);gap:2px}
+.ins-heatmap .hc{width:12px;height:12px;border-radius:2px}
+.ins-bars{display:flex;align-items:flex-end;gap:3px;height:55px}
+.ins-bars .ib{width:8px;border-radius:2px 2px 0 0;transition:height 2s ease}
+.ins-trend{margin-top:6px;height:25px;position:relative}
+.ins-trend svg{width:100%;height:100%}
+
+/* AUTOMATION - hidden in cloud/left area */
+.fp.auto{bottom:38%;left:5%}
+.auto-panel{background:rgba(8,15,28,.9);border:1px solid rgba(238,0,0,.15);border-radius:10px;
+  padding:10px 14px;backdrop-filter:blur(10px);box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.auto-panel h3{font-family:'Orbitron';font-size:9px;color:#ff5252;letter-spacing:2px;margin-bottom:6px}
+.auto-row{display:flex;flex-direction:column;gap:4px}
+.auto-row .ai{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;color:rgba(255,255,255,.8)}
+.auto-row .ai .d{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+
+/* MAGIC MIGRATE label */
+.fp.mig{top:28%;left:42%}
+.mig-text{font-family:'Orbitron';font-size:12px;font-weight:600;color:#fff;letter-spacing:2px;
+  text-shadow:0 0 15px rgba(255,255,255,.3)}
+.mig-sub{font-size:10px;color:rgba(255,255,255,.5);letter-spacing:1px;margin-top:2px}
+
+/* ===== CONNECTION LINES SVG ===== */
+#connSvg{position:absolute;inset:0;z-index:11;pointer-events:none;opacity:0}
+
+/* Traveling dots */
+.td{position:absolute;width:4px;height:4px;border-radius:50%;z-index:13;pointer-events:none;
+  box-shadow:0 0 6px currentColor,0 0 12px currentColor}
+
+/* Bottom stats */
+.stats{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);opacity:0;z-index:20;
+  display:flex;gap:20px;background:rgba(5,12,30,.85);border:1px solid rgba(0,229,255,.1);
+  border-radius:10px;padding:6px 22px;backdrop-filter:blur(12px)}
+.stats .s{text-align:center}
+.stats .s .n{font-family:'Orbitron';font-size:17px;font-weight:700;color:#00e5ff}
+.stats .s .l{font-size:7.5px;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase}
+
+/* Wipro star */
+.wstar{position:fixed;bottom:12px;right:16px;z-index:20;opacity:0}
+.wstar svg{width:28px;height:28px;filter:drop-shadow(0 0 6px rgba(0,229,255,.4))}
+
+/* Corners */
+.cn{position:fixed;width:35px;height:35px;z-index:20;opacity:0}
+.cn.tl{top:6px;left:6px;border-top:1.5px solid rgba(0,229,255,.25);border-left:1.5px solid rgba(0,229,255,.25)}
+.cn.tr{top:6px;right:6px;border-top:1.5px solid rgba(0,229,255,.25);border-right:1.5px solid rgba(0,229,255,.25)}
+.cn.bl{bottom:6px;left:6px;border-bottom:1.5px solid rgba(0,229,255,.25);border-left:1.5px solid rgba(0,229,255,.25)}
+.cn.br{bottom:6px;right:6px;border-bottom:1.5px solid rgba(0,229,255,.25);border-right:1.5px solid rgba(0,229,255,.25)}
+</style>
+</head>
+<body>
+
+<!-- ===== DATACENTER SCENE ===== -->
+<div class="scene">
+  <div class="dc-base"></div>
+
+  <!-- Left racks -->
+  <div class="rack L"><div class="rack-inner">
+    <div class="rack-col" id="rl1"></div>
+    <div class="rack-col" id="rl2"></div>
+  </div><div class="rack-glow"></div></div>
+
+  <!-- Right racks -->
+  <div class="rack R"><div class="rack-inner">
+    <div class="rack-col" id="rr1"></div>
+    <div class="rack-col" id="rr2"></div>
+  </div><div class="rack-glow"></div></div>
+
+  <!-- Floor -->
+  <div class="floor"><div class="floor-grid"></div><div class="floor-glow"></div></div>
+
+  <!-- Aurora/rainbow energy streams -->
+  <div class="aurora" id="aurora">
+    <div class="aurora-band a1"></div>
+    <div class="aurora-band a2"></div>
+    <div class="aurora-band a3"></div>
+  </div>
+
+  <!-- Nebula glow around center -->
+  <div class="nebula" id="nebula">
+    <div class="nebula-layer n1"></div>
+    <div class="nebula-layer n2"></div>
+    <div class="nebula-layer n3"></div>
+    <div class="nebula-layer n4"></div>
+    <div class="nebula-layer n5"></div>
+  </div>
+
+  <!-- Pedestal -->
+  <div class="pedestal" id="pedestal">
+    <div class="pedestal-top"></div>
+    <div class="pedestal-ring"></div>
+    <div class="pedestal-ring2"></div>
+  </div>
+
+  <div class="vig"></div>
+</div>
+
+<!-- 3D Particles -->
+<canvas id="bg"></canvas>
+
+<!-- ===== UI ===== -->
+<div id="ui">
+  <div class="cn tl" id="c0"></div><div class="cn tr" id="c1"></div>
+  <div class="cn bl" id="c2"></div><div class="cn br" id="c3"></div>
+
+  <!-- Title -->
+  <div class="title" id="title">
+    <div class="line1">WIPRO CISS HYBRID CLOUD ENGINEERING:</div>
+    <div class="line2">Solution Sphere</div>
+    <div class="line3">CISS-COE Unified Infrastructure Dashboard</div>
+  </div>
+
+  <!-- Migration banner -->
+  <div class="mig-banner" id="migBanner">
+    <div class="box">
+      <h3>ACTIVE MIGRATION: <span class="hl">VMWARE VM</span> <span class="arr">➜</span> <span class="yl">NUTANIX</span> (OTHER HYPERVISORS)</h3>
+      <p>Magic Migrate — Seamless, Powerful Workload Migration</p>
+    </div>
+  </div>
+
+  <!-- Center label -->
+  <div class="sph-lbl" id="sphLbl"><h2>SOLUTION<br>SPHERE</h2></div>
+
+  <!-- SVG Connections -->
+  <svg id="connSvg"></svg>
+
+  <!-- ===== FLOATING LABELS ===== -->
+  <div class="flbl cyan" id="fl0" style="top:19%;left:30%">Cloud</div>
+  <div class="flbl white" id="fl1" style="top:17%;right:16%">Virtualization</div>
+  <div class="flbl green" id="fl2" style="top:29%;left:47%">Magic Migrate:<br>Workload Migration</div>
+  <div class="flbl cyan" id="fl3" style="top:34%;left:7%">IPAM Solution</div>
+  <div class="flbl yellow" id="fl4" style="bottom:25%;left:25%">Massive Storage</div>
+  <div class="flbl green" id="fl5" style="bottom:25%;right:18%">Data Protection</div>
+  <div class="flbl white" id="fl6" style="top:33%;right:5%">Insights: Forecasting &amp; History</div>
+  <div class="flbl cyan" id="fl7" style="left:7%;bottom:40%">Automation</div>
+  <div class="flbl yellow" id="fl8" style="top:20%;left:10%">Migration In Progress</div>
+  <div class="flbl green" id="fl9" style="top:18%;right:3%">Multi-Cloud Sync</div>
+  <div class="flbl white" id="fl10" style="bottom:30%;right:3%">Insights Updating</div>
+
+  <!-- ===== CLOUD (AWS + OpenShift cloud shape) ===== -->
+  <div class="fp cloud" id="fpCloud">
+    <div class="cloud-shape">
+      <div class="cloud-bump"></div>
+      <div class="cloud-body">
+        <div class="logo-text">aws</div>
+        <div class="os-icon">⟲</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VIRTUALIZATION ===== -->
+  <div class="fp virt" id="fpVirt">
+    <div class="virt-box">
+      <div class="v-card vmw"><div class="name">vmware<span style="color:#fff">.</span></div><div class="sub">vSphere</div></div>
+      <div class="v-card ntnx"><div class="name">NUTANIX.</div><div class="sub">AHV</div></div>
+      <div class="v-card hv"><div class="name">Hyper-V</div><div class="sub">WinRM</div></div>
+    </div>
+  </div>
+
+  <!-- ===== IPAM (tree diagram) ===== -->
+  <div class="fp ipam" id="fpIpam">
+    <div class="ipam-panel">
+      <h3>🌐 IPAM SOLUTION</h3>
+      <div class="ipam-tree">
+        <div class="node">IP Manager</div>
+        <div class="vline"></div>
+        <div class="hline"></div>
+        <div class="row">
+          <div class="col"><div class="icon-node">🖧</div><div class="icon-label">Subnets</div></div>
+          <div class="col"><div class="icon-node">📡</div><div class="icon-label">DNS</div></div>
+          <div class="col"><div class="icon-node">🔄</div><div class="icon-label">DHCP</div></div>
+        </div>
+        <div style="height:6px"></div>
+        <div class="row">
+          <div class="col"><div class="icon-node" style="font-size:9px;font-weight:700;color:#00e5ff">v4</div><div class="icon-label">IPv4</div></div>
+          <div class="col"><div class="icon-node" style="font-size:9px;font-weight:700;color:#7c4dff">v6</div><div class="icon-label">IPv6</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STORAGE (server rack boxes) ===== -->
+  <div class="fp stor" id="fpStor">
+    <div class="stor-rack">
+      <div class="stor-box hpe"><div class="drives"><i></i><i></i><i></i><i></i></div><div class="lbl">Pure<br>HPE</div></div>
+      <div class="stor-box na"><div class="drives"><i></i><i></i><i></i><i></i></div><div class="lbl">Net<br>App</div></div>
+      <div class="stor-box dell"><div class="drives"><i></i><i></i><i></i><i></i></div><div class="lbl">Dell<br>EMC</div></div>
+    </div>
+  </div>
+
+  <!-- ===== DATA PROTECTION ===== -->
+  <div class="fp bkp" id="fpBkp">
+    <div class="bkp-panel">
+      <h3>🛡️ DATA PROTECTION</h3>
+      <div class="bkp-row">
+        <div class="bkp-item"><div class="ring" style="border-color:#00B388;color:#00B388">🔒</div><div class="name" style="color:#00B388">rubrik</div></div>
+        <div class="bkp-item"><div class="ring" style="border-color:#26BFA6;color:#26BFA6">⚙️</div><div class="name" style="color:#26BFA6">cohesity</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== INSIGHTS (monitor panel) ===== -->
+  <div class="fp ins" id="fpIns">
+    <div class="ins-monitor">
+      <div class="topbar"><h3>📊 INSIGHTS &amp; FORECASTING</h3><div class="dots"><span style="background:#ff5252"></span><span style="background:#ffeb3b"></span><span style="background:#00e676"></span></div></div>
+      <div style="font-size:7px;color:rgba(255,255,255,.35);letter-spacing:1px;margin-bottom:4px">HEAT MAP</div>
+      <div class="ins-heatmap" id="heatmap"></div>
+      <div style="font-size:7px;color:rgba(255,255,255,.35);letter-spacing:1px;margin:6px 0 3px">TREND ANALYSIS</div>
+      <div class="ins-bars" id="insBars"></div>
+      <div class="ins-trend">
+        <svg viewBox="0 0 180 25" fill="none">
+          <polyline points="0,20 20,18 40,15 60,12 80,14 100,8 120,10 140,5 160,6 180,3" stroke="#00e5ff" stroke-width="1.5" fill="none" opacity=".6"/>
+          <polyline points="0,22 20,20 40,19 60,16 80,18 100,14 120,12 140,10 160,11 180,8" stroke="#ff6d00" stroke-width="1" fill="none" opacity=".4"/>
+          <polyline points="0,15 20,17 40,12 60,10 80,13 100,11 120,8 140,9 160,4 180,2" stroke="#00e676" stroke-width="1" fill="none" opacity=".4" stroke-dasharray="3,2"/>
+        </svg>
+      </div>
+      <div style="font-size:7px;color:rgba(255,255,255,.3);margin-top:2px;letter-spacing:.5px">AI Predictions • Capacity Planning</div>
+    </div>
+  </div>
+
+  <!-- ===== AUTOMATION ===== -->
+  <div class="fp auto" id="fpAuto">
+    <div class="auto-panel">
+      <h3>⚡ AUTOMATION</h3>
+      <div class="auto-row">
+        <div class="ai"><span class="d" style="background:#EE0000"></span>Ansible AAP</div>
+        <div class="ai"><span class="d" style="background:#7B42BC"></span>Terraform</div>
+        <div class="ai"><span class="d" style="background:#326CE5"></span>Kubernetes</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats" id="stats">
+    <div class="s"><div class="n" id="n0">0</div><div class="l">VMs Managed</div></div>
+    <div class="s"><div class="n" id="n1">0</div><div class="l">Platforms</div></div>
+    <div class="s"><div class="n" id="n2">0</div><div class="l">Migrations</div></div>
+    <div class="s"><div class="n" id="n3">0</div><div class="l">% Uptime</div></div>
+    <div class="s"><div class="n" id="n4">0</div><div class="l">PB Storage</div></div>
+  </div>
+
+  <div class="wstar" id="wstar"><svg viewBox="0 0 50 50"><polygon points="25,2 32,18 50,20 37,33 40,50 25,42 10,50 13,33 0,20 18,18" fill="none" stroke="#00e5ff" stroke-width="1.5"/><polygon points="25,12 29,22 40,23 32,30 34,40 25,35 16,40 18,30 10,23 21,22" fill="rgba(0,229,255,.1)"/></svg></div>
+</div>
+
+<script>
+// ===== Generate rack units =====
+['rl1','rl2','rr1','rr2'].forEach(id=>{
+  const el=document.getElementById(id);
+  const cols=['g','c','b','o','c','g','r','c','b','g'];
+  for(let i=0;i<35;i++){
+    const u=document.createElement('div');u.className='ru';
+    for(let j=0;j<4;j++){const l=document.createElement('div');l.className='led '+cols[(i*3+j)%cols.length];u.appendChild(l);}
+    el.appendChild(u);
+  }
+});
+
+// Generate heatmap cells
+const hm=document.getElementById('heatmap');
+const hmColors=['#0d47a1','#1565c0','#1e88e5','#42a5f5','#64b5f6','#ff6d00','#ff9100','#ffab00','#f44336','#e91e63'];
+for(let i=0;i<25;i++){const c=document.createElement('div');c.className='hc';c.style.background=hmColors[Math.floor(Math.random()*hmColors.length)];c.style.opacity=.6+Math.random()*.4;hm.appendChild(c);}
+
+// Generate insight bars
+const ib=document.getElementById('insBars');
+const bColors=['#00e5ff','#7c4dff','#00e676','#ff6d00','#ff4081','#ffeb3b','#00e5ff','#7c4dff'];
+for(let i=0;i<8;i++){const b=document.createElement('div');b.className='ib';b.style.background=bColors[i];b.style.height=(12+Math.random()*40)+'px';b.style.opacity=.6+Math.random()*.3;ib.appendChild(b);}
+
+// ===== WebGL =====
+const canvas=document.getElementById('bg');let W=innerWidth,H=innerHeight;canvas.width=W;canvas.height=H;
+const gl=canvas.getContext('webgl',{antialias:true,alpha:true});
+const VS=`attribute vec3 aP;attribute float aS;attribute vec3 aC;attribute float aH;
+uniform mat4 uM;uniform float uT,uA;varying vec3 vC;varying float vA;
+void main(){float p=.5+.5*sin(uT*1.3+aH);vec3 pp=aP*(1.+.015*sin(uT*.6+aH*2.5));
+gl_Position=uM*vec4(pp,1.);gl_PointSize=aS*(1.+.2*p)*(420./gl_Position.w);vC=aC;vA=(.25+.75*p)*uA;}`;
+const FS=`precision mediump float;varying vec3 vC;varying float vA;
+void main(){float d=length(gl_PointCoord-vec2(.5));if(d>.5)discard;gl_FragColor=vec4(vC,smoothstep(.5,.02,d)*vA);}`;
+function ms(t,s){const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);return sh;}
+const pr=gl.createProgram();gl.attachShader(pr,ms(gl.VERTEX_SHADER,VS));gl.attachShader(pr,ms(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(pr);gl.useProgram(pr);
+const aP=gl.getAttribLocation(pr,'aP'),aS=gl.getAttribLocation(pr,'aS'),aC=gl.getAttribLocation(pr,'aC'),
+  aH=gl.getAttribLocation(pr,'aH'),uM=gl.getUniformLocation(pr,'uM'),uT=gl.getUniformLocation(pr,'uT'),uA=gl.getUniformLocation(pr,'uA');
+
+function mk(gen,n){const d=new Float32Array(n*8);for(let i=0;i<n;i++){const o=gen(i,n),x=i*8;for(let j=0;j<8;j++)d[x+j]=o[j];}
+const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,d,gl.STATIC_DRAW);return{b,n};}
+const R=()=>Math.random(),RA=()=>R()*6.28,RC=()=>Math.acos(2*R()-1);
+
+// Sphere
+const sph=mk(()=>{const t=RA(),p=RC(),r=1.5+(R()-.5)*.08;const m=R();let c;
+  if(m<.25)c=[0,.9,1];else if(m<.45)c=[.49,.3,1];else if(m<.6)c=[0,.9,.47];else if(m<.75)c=[1,.55,.15];
+  else if(m<.88)c=[1,.25,.5];else c=[.9,.9,1];
+  return[r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p),1+R()*2,...c,RA()];},5500);
+// Core
+const cor=mk(()=>{const t=RA(),p=RC(),r=R()*1;
+  const m=R();let c;if(m<.5)c=[.15,.6,1];else if(m<.8)c=[.4,.2,.9];else c=[1,.3,.6];
+  return[r*Math.sin(p)*Math.cos(t),r*Math.sin(p)*Math.sin(t),r*Math.cos(p),.4+R()*1.2,...c,RA()];},2000);
+// Ring
+const rn1=mk((i,n)=>{const a=(i/n)*6.28,r=2+Math.sin(a*3)*.05;
+  return[r*Math.cos(a),(R()-.5)*.02,r*Math.sin(a),.5+R()*.7,0,.85,1,a];},1500);
+// Ring2 tilted
+const rn2=mk((i,n)=>{const a=(i/n)*6.28,r=2.4;
+  return[r*Math.cos(a),r*Math.sin(a)*.3+(R()-.5)*.02,r*Math.sin(a)*.6,.3+R()*.5,.45,.25,1,a];},1000);
+// Stars
+const sts=mk(()=>{const d=8+R()*30,t=RA(),p=RC(),b=.2+R()*.5;
+  return[d*Math.sin(p)*Math.cos(t),d*Math.sin(p)*Math.sin(t),d*Math.cos(p),.15+R()*.7,b,b,b+R()*.15,RA()];},2500);
+
+function persp(f,a,n,fa){const ff=1/Math.tan(f/2);return new Float32Array([ff/a,0,0,0,0,ff,0,0,0,0,(fa+n)/(n-fa),-1,0,0,(2*fa*n)/(n-fa),0]);}
+function mul(a,b){const r=new Float32Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){r[j*4+i]=0;for(let k=0;k<4;k++)r[j*4+i]+=a[k*4+i]*b[j*4+k];}return r;}
+function rY(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1]);}
+function rX(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1]);}
+function tr(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]);}
+
+let proj=persp(Math.PI/3.5,W/H,.1,100);
+gl.viewport(0,0,W,H);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE);gl.clearColor(0,0,0,0);
+
+function dr(o,al){gl.uniform1f(uA,al);gl.bindBuffer(gl.ARRAY_BUFFER,o.b);
+  gl.enableVertexAttribArray(aP);gl.vertexAttribPointer(aP,3,gl.FLOAT,false,32,0);
+  gl.enableVertexAttribArray(aS);gl.vertexAttribPointer(aS,1,gl.FLOAT,false,32,12);
+  gl.enableVertexAttribArray(aC);gl.vertexAttribPointer(aC,3,gl.FLOAT,false,32,16);
+  gl.enableVertexAttribArray(aH);gl.vertexAttribPointer(aH,1,gl.FLOAT,false,32,28);
+  gl.drawArrays(gl.POINTS,0,o.n);}
+
+// ===== ANIMATION =====
+let st=performance.now(),t=0;
+function e(x){return 1-Math.pow(1-x,3);}
+function cl(x){return Math.max(0,Math.min(1,x));}
+function tl(x,s,d){return cl((x-s)/d);}
+function ac(el,tgt,dur,s0,ct){const p=cl((ct-s0)/dur);el.textContent=tgt>=100?Math.round(tgt*e(p)).toLocaleString():(tgt*e(p)).toFixed(tgt%1?2:0);}
+
+function render(){
+  t=(performance.now()-st)/1000;
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const cD=6-e(tl(t,0,3))*.6;
+  const view=mul(tr(0,.1,-cD),mul(rX(.08+Math.sin(t*.1)*.02),rY(t*.04)));
+  gl.uniformMatrix4fv(uM,false,mul(proj,view));gl.uniform1f(uT,t);
+
+  dr(sts,1);
+  if(t>1)dr(cor,e(tl(t,1,1.5)));
+  if(t>1.5)dr(sph,e(tl(t,1.5,2)));
+  if(t>2.5)dr(rn1,e(tl(t,2.5,1)));
+  if(t>3)dr(rn2,e(tl(t,3,1)));
+
+  // UI animations
+  const cp=e(tl(t,.2,.6));for(let i=0;i<4;i++)document.getElementById('c'+i).style.opacity=cp*.35;
+
+  // Title
+  const tp=e(tl(t,.3,1.5));const mt=document.getElementById('title');
+  mt.style.opacity=tp;mt.style.transform=`translateX(-50%) translateY(${(1-tp)*-15}px)`;
+
+  // Migration banner
+  const mp=e(tl(t,1.5,1));document.getElementById('migBanner').style.opacity=mp;
+
+  // Nebula + aurora
+  document.getElementById('nebula').style.opacity=e(tl(t,1.5,2));
+  document.getElementById('aurora').style.opacity=e(tl(t,2,2))*.7;
+
+  // Pedestal
+  document.getElementById('pedestal').style.opacity=e(tl(t,2,1.5));
+
+  // Sphere label
+  const sp=e(tl(t,2.5,1.5));const sl=document.getElementById('sphLbl');
+  sl.style.opacity=sp*.7;sl.style.transform=`translate(-50%,-55%) scale(${.7+sp*.3})`;
+
+  // Feature panels
+  const fps=[
+    {id:'fpCloud',t:3.5},{id:'fpVirt',t:4},{id:'fpIpam',t:4.5},{id:'fpIns',t:5},
+    {id:'fpStor',t:5.5},{id:'fpBkp',t:6},{id:'fpAuto',t:6.5}
+  ];
+  fps.forEach((f,i)=>{
+    const el=document.getElementById(f.id);
+    const pp=e(tl(t,f.t,1));
+    el.style.opacity=pp;
+    const fy=Math.sin(t*.35+i*1.2)*3;
+    el.style.transform=`translateY(${(1-pp)*20+fy}px)`;
+  });
+
+  // Floating labels
+  for(let i=0;i<=10;i++){
+    const fl=document.getElementById('fl'+i);
+    const fp=e(tl(t,3+i*.3,.8));
+    fl.style.opacity=fp*.55;
+    fl.style.transform=`translateY(${Math.sin(t*.3+i)*2}px)`;
+  }
+
+  // Stats
+  const bp=e(tl(t,7.5,1));document.getElementById('stats').style.opacity=bp;
+  if(t>7.5){
+    ac(document.getElementById('n0'),4827,2,7.5,t);
+    ac(document.getElementById('n1'),8,1,7.5,t);
+    ac(document.getElementById('n2'),1243,2,7.5,t);
+    ac(document.getElementById('n3'),99.97,1.5,7.5,t);
+    ac(document.getElementById('n4'),385,2,7.5,t);
+  }
+  document.getElementById('wstar').style.opacity=e(tl(t,8.5,1));
+
+  requestAnimationFrame(render);
+}
+render();
+
+window.addEventListener('resize',()=>{W=innerWidth;H=innerHeight;canvas.width=W;canvas.height=H;
+  gl.viewport(0,0,W,H);proj=persp(Math.PI/3.5,W/H,.1,100);});
+</script>
+</body>
+</html>

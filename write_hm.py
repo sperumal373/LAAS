@@ -1,0 +1,418 @@
+
+# write_hm.py - writes the fixed hyperv_migrate.py
+import os
+
+TARGET = r'C:\caas-dashboard\backend\hyperv_migrate.py'
+
+CODE = r'''"""
+hyperv_migrate.py - VMware -> Hyper-V via SCVMM (VM object method ONLY)
+
+ROOT CAUSE OF PREVIOUS FAILURE:
+  vCenter 172.17.168.212 is registered in SCVMM as hostname
+  'vcsa80u3-rookie.sdxtest.local', not by IP.
+  Old code searched only by IP -> NOT_REGISTERED -> Error 400 -> refresh
+  also searched by IP -> VC_NOT_IN_SCVMM -> refresh never ran -> VM not found.
+
+FIX: Refresh ALL VirtualizationManagers (not filtered by IP).
+     This ensures hostname-registered vCenters get their inventory refreshed.
+"""
+import os, time, json, traceback, subprocess
+
+SCVMM_HOST   = "172.17.66.35"
+SCVMM_SERVER = "SDXDCWRC02P3233"
+SCVMM_USER   = r"sdxtest\zertohypv"
+SCVMM_PASS   = "Wipro@123"
+HV_HOST_FQDN = "sdxdcwrc02p3233.sdxtest.local"
+HV_VM_PATH   = r"F:\Hyper-V-VM's"
+
+VCENTER_CREDS = {
+    "172.17.101.15":  {"user": "administrator@vsphere.local", "password": "Sdxdc@101-15"},
+    "172.17.101.17":  {"user": "administrator@vsphere.local", "password": "Sdxdc@101-17"},
+    "172.17.168.212": {"user": "administrator@vsphere.local", "password": "Sdxdc@168-212"},
+    "172.17.80.150":  {"user": "administrator@vsphere.local", "password": "Sdxdc@80-150"},
+    "172.17.73.191":  {"user": "administrator@vsphere.local", "password": "Sdxdc@73-191"},
+    "172.16.6.125":   {"user": "administrator@vsphere.local", "password": "Sdxdr@6-125"},
+}
+
+
+def _ps(script, timeout=120):
+    """Run PowerShell on SCVMM host via WinRM. Returns stdout."""
+    wrapped = (
+        '$env:PSModulePath += ";C:\\Program Files\\Microsoft System Center'
+        '\\Virtual Machine Manager\\bin"; '
+        f'$vmm = Get-SCVMMServer "{SCVMM_SERVER}"; '
+        + script
+    )
+    cmd = (
+        f'$c = New-Object PSCredential("{SCVMM_USER}",'
+        f'(ConvertTo-SecureString "{SCVMM_PASS}" -AsPlainText -Force));'
+        f'Invoke-Command -ComputerName {SCVMM_HOST} -Credential $c '
+        f'-ScriptBlock {{ {wrapped} }}'
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", cmd],
+        capture_output=True, text=True, timeout=timeout
+    )
+    out = (result.stdout or "").strip()
+    err = (result.stderr or "").strip()
+    if result.returncode != 0 and err:
+        low = err.lower()
+        if "error" in low or "exception" in low or "fail" in low:
+            raise RuntimeError(err[:1500])
+    return out
+
+
+def _resolve_vcenter_ip(raw):
+    """Parse vCenter IP from string, JSON string, or dict."""
+    if isinstance(raw, dict):
+        return raw.get("vcenter_id", raw.get("host", "172.17.168.212"))
+    if isinstance(raw, str) and raw.strip().startswith("{"):
+        try:
+            obj = json.loads(raw)
+            return obj.get("vcenter_id", obj.get("host", raw))
+        except Exception:
+            pass
+    return raw or "172.17.168.212"
+
+
+def _ensure_vcenter_and_refresh(vc_ip, vc_user, vc_pass, log_fn, plan_id):
+    """
+    THE KEY FIX:
+    1. List ALL registered VirtualizationManagers (vCenter may be under hostname)
+    2. If vc_ip not found by IP: attempt Add-SCVirtualizationManager
+       (Error 400 = already registered under hostname - that's OK)
+    3. Refresh ALL VirtualizationManagers unconditionally
+    """
+    # Step 1: List ALL managers for debug
+    log_fn(plan_id, "  Listing ALL registered SCVMM VirtualizationManagers...", "system")
+    all_mgrs = ""
+    try:
+        all_mgrs = _ps(
+            '$all = Get-SCVirtualizationManager -VMMServer $vmm 2>$null; '
+            'if ($all) { '
+            '  $all | ForEach-Object { '
+            '    Write-Host "MGR|Name=$($_.Name)|FQDN=$($_.FQDN)|State=$($_.ConnectionState)|Addr=$($_.Address)" '
+            '  } '
+            '} else { Write-Host "NO_MANAGERS_REGISTERED" }',
+            timeout=60
+        )
+        log_fn(plan_id, f"  Registered vCenters in SCVMM:\n{all_mgrs}", "system")
+    except Exception as e:
+        log_fn(plan_id, f"  [WARN] Cannot list managers: {e}", "system")
+
+    # Step 2: Register if not found by IP (Error 400 = already exists under hostname)
+    if vc_ip not in all_mgrs:
+        log_fn(plan_id, f"  {vc_ip} not in manager list by IP. Attempting Add-SCVirtualizationManager...", "system")
+        try:
+            reg = _ps(
+                f'$vcCred = New-Object PSCredential("{vc_user}",'
+                f'(ConvertTo-SecureString "{vc_pass}" -AsPlainText -Force)); '
+                f'$cert = Get-SCCertificate -ComputerName "{vc_ip}" -TCPPort 443 -ErrorAction SilentlyContinue; '
+                f'if ($cert) {{ '
+                f'  $vc = Add-SCVirtualizationManager -VMMServer $vmm '
+                f'  -ComputerName "{vc_ip}" -Credential $vcCred '
+                f'  -TCPPort 443 -Certificate $cert -RunAsynchronously:$false; '
+                f'  if ($vc) {{ "ADDED|$($vc.Name)" }} else {{ "ADDED_EMPTY" }} '
+                f'}} else {{ "CERT_FAILED|Cannot get cert from {vc_ip}" }}',
+                timeout=300
+            )
+            log_fn(plan_id, f"  Registration result: {reg}", "system")
+            time.sleep(10)
+        except Exception as e:
+            err_str = str(e)
+            if "400" in err_str or "already associated" in err_str.lower():
+                log_fn(plan_id,
+                    f"  [INFO] SCVMM Error 400 = vCenter already registered under its hostname "
+                    f"(e.g. vcsa80u3-rookie.sdxtest.local). "
+                    f"Proceeding to refresh ALL managers.", "system")
+            else:
+                log_fn(plan_id, f"  [WARN] Registration error: {err_str[:400]}", "system")
+    else:
+        log_fn(plan_id, f"  vCenter {vc_ip} confirmed in SCVMM.", "system")
+
+    # Step 3: REFRESH ALL VirtualizationManagers - THE CRITICAL FIX
+    log_fn(plan_id, "  Refreshing ALL VirtualizationManagers (handles hostname-registered vCenters)...", "system")
+    try:
+        refresh_out = _ps(
+            '$vcs = Get-SCVirtualizationManager -VMMServer $vmm 2>$null; '
+            'if (-not $vcs) { Write-Host "NO_MANAGERS_TO_REFRESH"; return }; '
+            'foreach ($vc in $vcs) { '
+            '  Write-Host "REFRESHING|$($vc.Name)"; '
+            '  try { '
+            '    Read-SCVirtualizationManager -VirtualizationManager $vc 2>$null | Out-Null; '
+            '    Write-Host "REFRESHED_OK|$($vc.Name)" '
+            '  } catch { '
+            '    $msg = $_.Exception.Message; '
+            '    if ($msg.Length -gt 120) { $msg = $msg.Substring(0,120) }; '
+            '    Write-Host "REFRESH_ERR|$($vc.Name)|$msg" '
+            '  } '
+            '}',
+            timeout=600
+        )
+        log_fn(plan_id, f"  Refresh results:\n{refresh_out}", "system")
+        if "REFRESHED_OK" in refresh_out:
+            log_fn(plan_id, "  Inventory refreshed. Waiting 25s for SCVMM to sync VMware VMs...", "system")
+            time.sleep(25)
+            return True
+        else:
+            log_fn(plan_id, "  [WARN] No successful refreshes. VMs may not appear in inventory.", "system")
+            return False
+    except Exception as e:
+        log_fn(plan_id, f"  [WARN] Refresh error: {e}", "system")
+        return False
+
+
+def _wait_for_vm_in_scvmm(vm_name, log_fn, plan_id, max_wait=240):
+    """
+    Poll SCVMM until the VMware VM appears in inventory.
+    Reports total VMware VMs count at each poll to help diagnose.
+    Returns (found: bool, info: str).
+    """
+    interval = 20
+    elapsed  = 0
+    while elapsed <= max_wait:
+        try:
+            out = _ps(
+                f'$vms = Get-SCVirtualMachine -VMMServer $vmm 2>$null | '
+                f'Where-Object {{ $_.Name -eq "{vm_name}" '
+                f'-and $_.VirtualizationPlatform -eq "VMwareESX" }}; '
+                f'if ($vms) {{ '
+                f'  $v = $vms | Select-Object -First 1; '
+                f'  "FOUND|Name=$($v.Name)|Status=$($v.Status)|'
+                f'Host=$($v.HostName)|CPU=$($v.CPUCount)|MemMB=$($v.MemoryAssignedMB)" '
+                f'}} else {{ '
+                f'  $cnt = (Get-SCVirtualMachine -VMMServer $vmm 2>$null | '
+                f'  Where-Object {{ $_.VirtualizationPlatform -eq "VMwareESX" }} | Measure-Object).Count; '
+                f'  "NOT_FOUND|TotalVMwareVMsVisible=$cnt" '
+                f'}}',
+                timeout=60
+            )
+            if "FOUND|" in out:
+                log_fn(plan_id, f"  VM found in SCVMM: {out}", "system")
+                return True, out
+            log_fn(plan_id, f"  {out} | {elapsed}s/{max_wait}s elapsed", "system")
+        except Exception as e:
+            log_fn(plan_id, f"  [WARN] VM lookup error: {e}", "system")
+        time.sleep(interval)
+        elapsed += interval
+    return False, "NOT_FOUND"
+
+
+def _start_v2v(vm_name, log_fn, plan_id):
+    """Start New-SCV2V using SCVMM VM object. No VMXPath (avoids Error 20413)."""
+    out = _ps(
+        f'$vm = Get-SCVirtualMachine -VMMServer $vmm 2>$null | '
+        f'Where-Object {{ $_.Name -eq "{vm_name}" '
+        f'-and $_.VirtualizationPlatform -eq "VMwareESX" }} | '
+        f'Select-Object -First 1; '
+        f'if (-not $vm) {{ throw "VM [{vm_name}] not found in SCVMM VMwareESX inventory." }}; '
+        f'$hvHost = Get-SCVMHost -VMMServer $vmm -ComputerName "{HV_HOST_FQDN}" 2>$null; '
+        f'if (-not $hvHost) {{ throw "Hyper-V host [{HV_HOST_FQDN}] not found in SCVMM." }}; '
+        f'Write-Host "V2V: $($vm.Name) -> $($hvHost.Name)"; '
+        f'$job = New-SCV2V '
+        f'-VM $vm '
+        f'-VMHost $hvHost '
+        f'-Name "{vm_name}" '
+        f'-Path "{HV_VM_PATH}" '
+        f'-VhdFormat VHDX '
+        f'-VhdType DynamicallyExpanding '
+        f'-RunAsynchronously; '
+        f'"V2V_STARTED|JobID=$($job.MostRecentTaskID)"',
+        timeout=300
+    )
+    return out
+
+
+def _poll_v2v(vm_name, plan_id, base_pct, log_fn, db_update_fn, max_wait=7200):
+    """Poll SCVMM until V2V finishes. Returns (success, detail)."""
+    elapsed  = 0
+    interval = 20
+    last_pct = -1
+
+    while elapsed < max_wait:
+        time.sleep(interval)
+        elapsed += interval
+        try:
+            status = _ps(
+                f'$hvm = Get-SCVirtualMachine -VMMServer $vmm 2>$null | '
+                f'Where-Object {{ $_.Name -eq "{vm_name}" '
+                f'-and $_.VirtualizationPlatform -ne "VMwareESX" }} | '
+                f'Select-Object -First 1; '
+                f'if ($hvm) {{ '
+                f'  "DONE|Status=$($hvm.Status)|Host=$($hvm.HostName)|'
+                f'CPU=$($hvm.CPUCount)|MemMB=$($hvm.MemoryAssignedMB)" '
+                f'}} else {{ '
+                f'  $jobs = Get-SCJob -VMMServer $vmm -Newest 50 2>$null | '
+                f'  Where-Object {{ $_.Name -like "*{vm_name}*" -or $_.Name -like "*V2V*" -or $_.Name -like "*Convert*" }} | '
+                f'  Sort-Object StartTime -Descending | Select-Object -First 1; '
+                f'  if ($jobs) {{ '
+                f'    "JOB|Status=$($jobs.Status)|PCT=$($jobs.PercentComplete)|'
+                f'Name=$($jobs.Name)|Err=$($jobs.ErrorInfo)" '
+                f'  }} else {{ "PENDING" }} '
+                f'}}',
+                timeout=60
+            )
+            if "DONE|" in status:
+                log_fn(plan_id, f"  V2V complete: {status}", "system")
+                return True, status
+            elif "JOB|" in status:
+                parts   = dict(x.split("=", 1) for x in status.split("|") if "=" in x)
+                pct     = int(parts.get("PCT", "0") or "0")
+                jstatus = parts.get("Status", "")
+                jerr    = parts.get("Err", "")
+                if pct != last_pct or elapsed % 60 == 0:
+                    log_fn(plan_id, f"  V2V: {pct}% [{jstatus}] ({elapsed}s)", "system")
+                    last_pct = pct
+                    db_update_fn(plan_id, "migrating", min(base_pct + 10 + int(pct * 0.5), 95))
+                if jstatus.lower() in ("completed", "success"):
+                    return True, status
+                elif jstatus.lower() in ("failed", "error"):
+                    return False, f"Job failed ({pct}%): {jerr[:400]}"
+            else:
+                if elapsed % 60 == 0:
+                    log_fn(plan_id, f"  Waiting for V2V job... ({elapsed}s)", "system")
+        except Exception as e:
+            if elapsed % 60 == 0:
+                log_fn(plan_id, f"  Poll error: {e}", "system")
+    return False, f"TIMEOUT after {max_wait}s"
+
+
+def orchestrate_hyperv_migration(plan_id, plan_data, db_update_fn, log_fn):
+    """Orchestrate VMware -> Hyper-V via SCVMM (VM object method only)."""
+    source_vc = _resolve_vcenter_ip(plan_data.get("source_vcenter", "172.17.168.212"))
+    vm_list   = json.loads(plan_data.get("vm_list", "[]"))
+    vm_names  = [
+        v.get("name", v.get("vm", "")) if isinstance(v, dict) else v
+        for v in vm_list
+    ]
+    total = len(vm_names)
+
+    if total == 0:
+        log_fn(plan_id, "No VMs selected.", "system")
+        db_update_fn(plan_id, "failed", 0)
+        return
+
+    vc_creds = VCENTER_CREDS.get(source_vc, {})
+    if not vc_creds:
+        log_fn(plan_id,
+               f"[ERROR] No credentials for vCenter {source_vc}. "
+               f"Known: {list(VCENTER_CREDS.keys())}", "system")
+        db_update_fn(plan_id, "failed", 0)
+        return
+
+    log_fn(plan_id, "=== VMware -> Hyper-V Migration (via SCVMM) ===", "system")
+    log_fn(plan_id, f"SCVMM: {SCVMM_HOST} ({SCVMM_SERVER})", "system")
+    log_fn(plan_id, f"Source vCenter: {source_vc}", "system")
+    log_fn(plan_id, f"Target Hyper-V: {HV_HOST_FQDN}", "system")
+    log_fn(plan_id, f"VMs to migrate: {total} -> {vm_names}", "system")
+    db_update_fn(plan_id, "executing", 5)
+
+    # Step 1: SCVMM connectivity
+    try:
+        ping = _ps('"SCVMM_OK: " + $vmm.Name', timeout=60)
+        log_fn(plan_id, f"SCVMM connected: {ping}", "system")
+    except Exception as e:
+        log_fn(plan_id, f"[ERROR] Cannot connect to SCVMM {SCVMM_HOST}: {e}", "system")
+        db_update_fn(plan_id, "failed", 0)
+        return
+
+    # Step 2: Hyper-V host check
+    try:
+        hv = _ps(
+            f'$h = Get-SCVMHost -VMMServer $vmm -ComputerName "{HV_HOST_FQDN}" 2>$null; '
+            f'if ($h) {{ "HV_OK|$($h.Name)|$($h.OverallState)" }} else {{ "HV_NOT_FOUND" }}',
+            timeout=60
+        )
+        log_fn(plan_id, f"Hyper-V host: {hv}", "system")
+        if "HV_NOT_FOUND" in hv:
+            log_fn(plan_id, f"[ERROR] Hyper-V host {HV_HOST_FQDN} not managed by SCVMM.", "system")
+            db_update_fn(plan_id, "failed", 0)
+            return
+    except Exception as e:
+        log_fn(plan_id, f"[ERROR] Hyper-V host check: {e}", "system")
+        db_update_fn(plan_id, "failed", 0)
+        return
+
+    # Step 3: Register vCenter + refresh ALL managers (key fix)
+    db_update_fn(plan_id, "executing", 10)
+    _ensure_vcenter_and_refresh(source_vc, vc_creds["user"], vc_creds["password"], log_fn, plan_id)
+
+    # Step 4: Migrate each VM
+    succeeded, failed_vms = [], []
+    for idx, vm_name in enumerate(vm_names):
+        base_pct = int((idx / total) * 70) + 15
+        log_fn(plan_id, f"\n--- [{idx+1}/{total}] Migrating '{vm_name}' ---", "system")
+        db_update_fn(plan_id, "migrating", base_pct)
+
+        try:
+            # Wait for VM in SCVMM inventory (4 min)
+            log_fn(plan_id, f"  Waiting for '{vm_name}' in SCVMM VMwareESX inventory...", "system")
+            vm_found, vm_info = _wait_for_vm_in_scvmm(vm_name, log_fn, plan_id, max_wait=240)
+            if not vm_found:
+                raise RuntimeError(
+                    f"VM '{vm_name}' not found in SCVMM VMwareESX inventory after 4 minutes. "
+                    "Check: SCVMM Console > Fabric > vCenter Servers (is it there?), "
+                    "then VMs and Services > All Hosts > filter VMwareESX. "
+                    "VM name must match exactly (case-sensitive)."
+                )
+
+            # Start V2V
+            log_fn(plan_id, "  Starting New-SCV2V via SCVMM VM object (no VMXPath)...", "system")
+            db_update_fn(plan_id, "migrating", base_pct + 5)
+            v2v = _start_v2v(vm_name, log_fn, plan_id)
+            log_fn(plan_id, f"  V2V started: {v2v}", "system")
+
+            # Poll until complete
+            db_update_fn(plan_id, "migrating", base_pct + 10)
+            ok, detail = _poll_v2v(vm_name, plan_id, base_pct, log_fn, db_update_fn)
+            if not ok:
+                raise RuntimeError(f"V2V failed: {detail}")
+
+            # Validate on Hyper-V
+            val = _ps(
+                f'$vm = Get-SCVirtualMachine -VMMServer $vmm 2>$null | '
+                f'Where-Object {{ $_.Name -eq "{vm_name}" '
+                f'-and $_.VirtualizationPlatform -ne "VMwareESX" }} | Select-Object -First 1; '
+                f'if ($vm) {{ "OK|Name=$($vm.Name)|Status=$($vm.Status)|Host=$($vm.HostName)" }} '
+                f'else {{ "NOT_FOUND_ON_HV" }}',
+                timeout=60
+            )
+            log_fn(plan_id, f"  Validation: {val}", "system")
+            if "OK|" in val:
+                log_fn(plan_id, f"[OK] '{vm_name}' migrated to Hyper-V!", "system")
+            else:
+                log_fn(plan_id, f"[WARN] Job done but VM not yet visible - check SCVMM Console.", "system")
+            succeeded.append(vm_name)
+
+        except Exception as e:
+            log_fn(plan_id, f"[FAIL] '{vm_name}': {e}", "system")
+            log_fn(plan_id, traceback.format_exc()[:600], "system")
+            failed_vms.append(vm_name)
+
+    log_fn(plan_id, f"\n=== {len(succeeded)}/{total} succeeded, {len(failed_vms)} failed ===", "system")
+    if failed_vms:
+        log_fn(plan_id, f"Failed: {', '.join(failed_vms)}", "system")
+    if not failed_vms:
+        db_update_fn(plan_id, "completed", 100)
+        log_fn(plan_id, "All VMs migrated to Hyper-V successfully.", "system")
+    elif succeeded:
+        db_update_fn(plan_id, "completed", 100)
+        log_fn(plan_id, f"Partial: {len(succeeded)}/{total}.", "system")
+    else:
+        db_update_fn(plan_id, "failed", 0)
+        log_fn(plan_id, "All migrations failed.", "system")
+'''
+
+with open(TARGET, 'w', encoding='utf-8') as f:
+    f.write(CODE)
+
+lines = CODE.count('\n')
+print(f"Written: {lines} lines to {TARGET}")
+
+# Verify syntax
+import ast
+try:
+    ast.parse(CODE)
+    print("SYNTAX OK")
+except SyntaxError as e:
+    print(f"SYNTAX ERROR: {e}")

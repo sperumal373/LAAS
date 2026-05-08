@@ -1,0 +1,545 @@
+
+//  OS Groups Tab 
+
+const OS_KEYS = [
+  { key:"rhel8",   label:"RHEL 8",   color:"#ef4444", icon:"" },
+  { key:"rhel9",   label:"RHEL 9",   color:"#f97316", icon:"" },
+  { key:"win2016", label:"Win 2016", color:"#3b82f6", icon:"" },
+  { key:"win2019", label:"Win 2019", color:"#6366f1", icon:"" },
+];
+
+const PWR_BADGE = {
+  on:      { bg:"#064e3b", color:"#34d399", text:" On" },
+  off:     { bg:"#1f2937", color:"#9ca3af", text:" Off" },
+  unknown: { bg:"#1c1917", color:"#78716c", text:"? Unknown" },
+};
+function PwrBadge({ state }) {
+  const s = (state||"unknown").toLowerCase();
+  const isOn = ["on","poweredon","powered_on","running","started"].includes(s);
+  const isOff = ["off","poweredoff","powered_off","shutdown","stopped"].includes(s);
+  const k = isOn ? "on" : isOff ? "off" : "unknown";
+  const b = PWR_BADGE[k];
+  return (
+    <span style={{ background:b.bg, color:b.color, fontSize:11,
+      borderRadius:4, padding:"2px 8px", fontWeight:600 }}>{b.text}</span>
+  );
+}
+
+function CISOsGroupVMs({ osKey, onViewVM }) {
+  const [data, setData]   = useState({ vms:[], total:0, pages:1 });
+  const [page, setPage]   = useState(1);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [remTarget, setRemTarget] = useState(null);  // {vm_scan_id, vm_name}
+  const [remResult, setRemResult]  = useState(null);
+  const [remLoading, setRemLoading] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    API(`/api/cis/os-groups/${osKey}/vms?page=${page}&page_size=30&search=${encodeURIComponent(search)}`)
+      .then(d => setData(d))
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  }, [osKey, page, search]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const doBulkRemediate = async (vm_scan_id, dry_run=true) => {
+    setRemLoading(true);
+    try {
+      const r = await API("/api/cis/remediate/bulk-vm", {
+        method:"POST",
+        body: JSON.stringify({ vm_scan_id, dry_run })
+      });
+      setRemResult({ ...r, vm_scan_id, dry_run });
+    } catch(e) { setRemResult({ error: String(e) }); }
+    setRemLoading(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        <input value={search} onChange={e=>{ setSearch(e.target.value); setPage(1); }}
+          placeholder="Search hostname / IP..."
+          style={{ flex:1, background:"#111827", border:"1px solid #374151", borderRadius:6,
+            color:"#e2e8f0", padding:"7px 12px", fontSize:13 }} />
+        <button onClick={load} style={{ background:"#374151", color:"#e2e8f0",
+          border:"none", borderRadius:6, padding:"7px 16px", cursor:"pointer" }}> Refresh</button>
+      </div>
+      {loading ? <div style={{ color:"#6b7280", padding:20 }}>Loading</div> : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:"#111827" }}>
+                {["VM Name","IP","OS","Power","Score","Pass","Fail","Last Scan","Actions"].map(h=>(
+                  <th key={h} style={{ padding:"8px 10px", color:"#9ca3af",
+                    textAlign:"left", borderBottom:"1px solid #1f2937", whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.vms.map((vm,i) => (
+                <tr key={i} style={{ borderBottom:"1px solid #111827" }}
+                  onMouseEnter={e=>e.currentTarget.style.background="#0f172a"}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{ padding:"8px 10px", color:"#e2e8f0", fontWeight:600 }}>{vm.hostname}</td>
+                  <td style={{ padding:"8px 10px", color:"#6b7280", fontFamily:"monospace" }}>{vm.ip_address||""}</td>
+                  <td style={{ padding:"8px 10px", color:"#9ca3af" }}>{vm.os_name||""}</td>
+                  <td style={{ padding:"8px 10px" }}><PwrBadge state={vm.power_state} /></td>
+                  <td style={{ padding:"8px 10px" }}>
+                    {vm.score != null ? (
+                      <span style={{ color: scoreColor(vm.score), fontWeight:700 }}>
+                        {Number(vm.score).toFixed(1)}%
+                      </span>
+                    ) : ""}
+                  </td>
+                  <td style={{ padding:"8px 10px", color:"#10b981" }}>{vm.passed??0}</td>
+                  <td style={{ padding:"8px 10px", color:"#ef4444" }}>{vm.failed??0}</td>
+                  <td style={{ padding:"8px 10px", color:"#6b7280", whiteSpace:"nowrap" }}>{fmtDt(vm.scanned_at)}</td>
+                  <td style={{ padding:"8px 10px" }}>
+                    <div style={{ display:"flex", gap:6 }}>
+                      {vm.vm_scan_id && (
+                        <>
+                          <button onClick={()=>onViewVM(vm)}
+                            style={{ background:"#1d4ed8", color:"#fff", border:"none",
+                              borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer" }}>
+                             Detail
+                          </button>
+                          <button onClick={()=>{ setRemTarget(vm); doBulkRemediate(vm.vm_scan_id, true); }}
+                            style={{ background:"#7c3aed", color:"#fff", border:"none",
+                              borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer" }}>
+                             Fix All
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.pages > 1 && (
+            <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:12 }}>
+              <button disabled={page<=1} onClick={()=>setPage(p=>p-1)}
+                style={{ background:"#1f2937", color:page<=1?"#374151":"#e2e8f0",
+                  border:"none", borderRadius:5, padding:"4px 14px", cursor:page>1?"pointer":"default" }}> Prev</button>
+              <span style={{ color:"#6b7280", alignSelf:"center", fontSize:13 }}>Page {page}/{data.pages}</span>
+              <button disabled={page>=data.pages} onClick={()=>setPage(p=>p+1)}
+                style={{ background:"#1f2937", color:page>=data.pages?"#374151":"#e2e8f0",
+                  border:"none", borderRadius:5, padding:"4px 14px", cursor:page<data.pages?"pointer":"default" }}>Next </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bulk Remediation Dialog */}
+      {remTarget && remResult && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+          <div style={{ background:"#111827", border:"1px solid #374151", borderRadius:12,
+            padding:24, width:560, maxHeight:"80vh", overflowY:"auto" }}>
+            <h3 style={{ color:"#f9fafb", margin:"0 0 12px" }}>
+               Fix All Failed  {remTarget.hostname}
+            </h3>
+            {remResult.error && <div style={{ color:"#ef4444" }}>{remResult.error}</div>}
+            {remResult.dry_run && (
+              <>
+                <p style={{ color:"#9ca3af", fontSize:13 }}>
+                  Found <strong style={{ color:"#f59e0b" }}>{remResult.total_to_fix}</strong> failed checks with auto-fix commands.
+                </p>
+                <div style={{ maxHeight:200, overflowY:"auto", marginBottom:12 }}>
+                  {(remResult.checks||[]).map((c,i)=>(
+                    <div key={i} style={{ color:"#e2e8f0", fontSize:12, padding:"4px 0",
+                      borderBottom:"1px solid #1f2937" }}>
+                      <strong style={{ color:"#a78bfa" }}>{c.cis_id}</strong>  {c.title}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=> doBulkRemediate(remTarget.vm_scan_id, false)}
+                    disabled={remLoading}
+                    style={{ background:"#7c3aed", color:"#fff", border:"none", borderRadius:7,
+                      padding:"8px 20px", cursor:"pointer", fontWeight:700 }}>
+                     Confirm & Execute
+                  </button>
+                  <button onClick={()=>{ setRemTarget(null); setRemResult(null); }}
+                    style={{ background:"#374151", color:"#e2e8f0", border:"none",
+                      borderRadius:7, padding:"8px 20px", cursor:"pointer" }}>Cancel</button>
+                </div>
+              </>
+            )}
+            {!remResult.dry_run && !remResult.error && (
+              <>
+                <div style={{ display:"flex", gap:16, marginBottom:12 }}>
+                  <div style={{ background:"#064e3b", borderRadius:8, padding:"8px 18px", textAlign:"center" }}>
+                    <div style={{ color:"#34d399", fontSize:22, fontWeight:800 }}>{remResult.fixed}</div>
+                    <div style={{ color:"#6ee7b7", fontSize:11 }}>FIXED</div>
+                  </div>
+                  <div style={{ background:"#450a0a", borderRadius:8, padding:"8px 18px", textAlign:"center" }}>
+                    <div style={{ color:"#ef4444", fontSize:22, fontWeight:800 }}>{remResult.failed}</div>
+                    <div style={{ color:"#fca5a5", fontSize:11 }}>FAILED</div>
+                  </div>
+                </div>
+                <div style={{ maxHeight:250, overflowY:"auto", marginBottom:12 }}>
+                  {(remResult.results||[]).map((r,i)=>(
+                    <div key={i} style={{ padding:"5px 0", borderBottom:"1px solid #1f2937", fontSize:12 }}>
+                      <span style={{ color: r.success?"#34d399":"#ef4444", marginRight:8 }}>
+                        {r.success?"":""}
+                      </span>
+                      <strong style={{ color:"#a78bfa" }}>{r.cis_id}</strong>
+                      {"  "}<span style={{ color:"#9ca3af" }}>{r.title}</span>
+                      {r.output && <pre style={{ color:"#6b7280", fontSize:10, margin:"2px 0 0 18px",
+                        whiteSpace:"pre-wrap" }}>{r.output}</pre>}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={()=>{ setRemTarget(null); setRemResult(null); load(); }}
+                  style={{ background:"#1f2937", color:"#e2e8f0", border:"none",
+                    borderRadius:7, padding:"8px 20px", cursor:"pointer" }}>Close</button>
+              </>
+            )}
+            {remLoading && <div style={{ color:"#6b7280", marginTop:8 }}>Running fixes</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CISOsGroups({ onViewVM }) {
+  const [groups, setGroups] = useState([]);
+  const [selKey, setSelKey] = useState("rhel8");
+  const [scanning, setScanning] = useState(false);
+  const [scanMsg, setScanMsg] = useState("");
+
+  useEffect(() => {
+    API("/api/cis/os-groups")
+      .then(d => setGroups(d.os_groups||[]))
+      .catch(()=>{});
+  }, []);
+
+  const triggerScan = async (os_key) => {
+    setScanning(true); setScanMsg("");
+    try {
+      const r = await API("/api/cis/scan", { method:"POST",
+        body: JSON.stringify({ os_filter: os_key }) });
+      setScanMsg(r.message || `Scan started (job #${r.job_id})`);
+    } catch(e) { setScanMsg("Error: " + String(e)); }
+    setScanning(false);
+  };
+
+  const grpMap = {};
+  (groups||[]).forEach(g => { grpMap[g.os_key] = g; });
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+      {/* OS Group Summary Cards */}
+      <div style={{ display:"flex", gap:14, flexWrap:"wrap" }}>
+        {OS_KEYS.map(osk => {
+          const g = grpMap[osk.key]||{};
+          return (
+            <div key={osk.key}
+              onClick={()=>setSelKey(osk.key)}
+              style={{ background: selKey===osk.key ? "#1e1b4b" : "#111827",
+                border:`2px solid ${selKey===osk.key ? osk.color : "#1f2937"}`,
+                borderRadius:12, padding:"14px 20px", cursor:"pointer",
+                minWidth:180, flex:1, transition:"all 0.2s" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                <span style={{ fontSize:22 }}>{osk.icon}</span>
+                <div>
+                  <div style={{ color:"#f9fafb", fontWeight:700, fontSize:15 }}>{osk.label}</div>
+                  <div style={{ color:"#6b7280", fontSize:11 }}>{g.total_vms||0} VMs</div>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8, fontSize:11, flexWrap:"wrap" }}>
+                <span style={{ color:"#34d399" }}> On: {g.powered_on||0}</span>
+                <span style={{ color:"#6b7280" }}> Off: {g.powered_off||0}</span>
+              </div>
+              {g.avg_score != null && (
+                <div style={{ marginTop:6, color: scoreColor(g.avg_score), fontWeight:700 }}>
+                  Avg: {Number(g.avg_score).toFixed(1)}%
+                </div>
+              )}
+              <div style={{ marginTop:10 }}>
+                <button
+                  onClick={e=>{ e.stopPropagation(); triggerScan(osk.key); }}
+                  disabled={scanning}
+                  style={{ background: osk.color, color:"#fff", border:"none",
+                    borderRadius:6, padding:"5px 14px", fontSize:12, cursor:"pointer",
+                    opacity: scanning ? 0.6 : 1, width:"100%" }}>
+                  {scanning ? "Starting" : " Scan This OS"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {scanMsg && (
+        <div style={{ background:"#0c4a6e", border:"1px solid #0ea5e9", borderRadius:8,
+          padding:"8px 16px", color:"#7dd3fc", fontSize:13 }}>{scanMsg}</div>
+      )}
+
+      {/* VM Table for selected OS */}
+      <div style={{ background:"#0d1117", border:"1px solid #1f2937", borderRadius:12, padding:16 }}>
+        <div style={{ color:"#f9fafb", fontWeight:700, marginBottom:12, fontSize:15 }}>
+          {OS_KEYS.find(o=>o.key===selKey)?.icon} {OS_KEYS.find(o=>o.key===selKey)?.label}  VM List
+        </div>
+        <CISOsGroupVMs osKey={selKey} onViewVM={onViewVM} />
+      </div>
+    </div>
+  );
+}
+
+//  Scan History Tab 
+
+function CISScanHistory() {
+  const [data, setData] = useState({ jobs:[], total:0, pages:1 });
+  const [page, setPage] = useState(1);
+  const [osFilter, setOsFilter] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const q = osFilter ? `&os_filter=${osFilter}` : "";
+    API(`/api/cis/scan-history?page=${page}&page_size=20${q}`)
+      .then(d=>setData(d))
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  }, [page, osFilter]);
+
+  useEffect(()=>{ load(); }, [load]);
+
+  const statusColor = (s) => {
+    if (s==="completed") return "#10b981";
+    if (s==="running")   return "#f59e0b";
+    if (s==="failed")    return "#ef4444";
+    return "#6b7280";
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:14, alignItems:"center" }}>
+        <select value={osFilter} onChange={e=>{setOsFilter(e.target.value);setPage(1);}}
+          style={{ background:"#111827", border:"1px solid #374151", borderRadius:6,
+            color:"#e2e8f0", padding:"7px 12px", fontSize:13 }}>
+          <option value="">All OS</option>
+          <option value="rhel8">RHEL 8</option>
+          <option value="rhel9">RHEL 9</option>
+          <option value="win2016">Win 2016</option>
+          <option value="win2019">Win 2019</option>
+        </select>
+        <button onClick={load} style={{ background:"#374151", color:"#e2e8f0",
+          border:"none", borderRadius:6, padding:"7px 16px", cursor:"pointer" }}></button>
+        <span style={{ color:"#6b7280", fontSize:12 }}>Total: {data.total} scans</span>
+      </div>
+      {loading ? <div style={{ color:"#6b7280" }}>Loading</div> : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead>
+              <tr style={{ background:"#111827" }}>
+                {["#","Status","OS Filter","Started","Duration","VMs","PowerOn","PowerOff","NA","Pass","Fail","Triggered By"].map(h=>(
+                  <th key={h} style={{ padding:"8px 10px", color:"#9ca3af",
+                    textAlign:"left", borderBottom:"1px solid #1f2937", whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.jobs.map((j,i)=>(
+                <tr key={i} style={{ borderBottom:"1px solid #111827" }}>
+                  <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.id}</td>
+                  <td style={{ padding:"8px 10px" }}>
+                    <span style={{ color: statusColor(j.status), fontWeight:600 }}>{j.status}</span>
+                  </td>
+                  <td style={{ padding:"8px 10px", color:"#a78bfa" }}>{j.os_filter||"All"}</td>
+                  <td style={{ padding:"8px 10px", color:"#9ca3af", whiteSpace:"nowrap" }}>{fmtDt(j.started_at)}</td>
+                  <td style={{ padding:"8px 10px", color:"#e2e8f0" }}>
+                    {j.duration_sec ? `${Math.floor(j.duration_sec/60)}m ${Math.round(j.duration_sec%60)}s` : ""}
+                  </td>
+                  <td style={{ padding:"8px 10px", color:"#e2e8f0" }}>{j.scanned_vms||0}/{j.target_vms||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#34d399" }}>{j.powered_on||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.powered_off||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#f97316" }}>{j.not_accessible||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#10b981", fontWeight:600 }}>{j.passed_checks||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#ef4444", fontWeight:600 }}>{j.failed_checks||0}</td>
+                  <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.triggered_by}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.pages > 1 && (
+            <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:12 }}>
+              <button disabled={page<=1} onClick={()=>setPage(p=>p-1)}
+                style={{ background:"#1f2937",color:page<=1?"#374151":"#e2e8f0",border:"none",borderRadius:5,padding:"4px 14px",cursor:page>1?"pointer":"default" }}></button>
+              <span style={{ color:"#6b7280", alignSelf:"center", fontSize:13 }}>Page {page}/{data.pages}</span>
+              <button disabled={page>=data.pages} onClick={()=>setPage(p=>p+1)}
+                style={{ background:"#1f2937",color:page>=data.pages?"#374151":"#e2e8f0",border:"none",borderRadius:5,padding:"4px 14px",cursor:page<data.pages?"pointer":"default" }}></button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+//  Baselines Tab 
+
+function CISBaselines() {
+  const [selOs, setSelOs] = useState("rhel8");
+  const [data, setData]   = useState({ rules:[], total:0, pages:1 });
+  const [page, setPage]   = useState(1);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editVal, setEditVal] = useState({});
+  const [saving, setSaving]   = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    API(`/api/cis/baselines/${selOs}?page=${page}&page_size=50&search=${encodeURIComponent(search)}`)
+      .then(d=>setData(d))
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  }, [selOs, page, search]);
+
+  useEffect(()=>{ load(); }, [load]);
+
+  const saveEdit = async () => {
+    if (!editRow) return;
+    setSaving(true);
+    try {
+      await API(`/api/cis/baselines/${editRow.id}`, {
+        method:"PATCH", body: JSON.stringify(editVal)
+      });
+      setEditRow(null); load();
+    } catch(e) { alert("Save failed: " + e); }
+    setSaving(false);
+  };
+
+  const reimport = async () => {
+    setImporting(true); setImportMsg("");
+    try {
+      const r = await API("/api/cis/baselines/reimport", { method:"POST" });
+      setImportMsg(r.success ? " Re-import complete" : " " + r.stderr);
+      if (r.success) load();
+    } catch(e) { setImportMsg("Error: " + e); }
+    setImporting(false);
+  };
+
+  return (
+    <div>
+      {/* OS Tab bar */}
+      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+        {OS_KEYS.map(o=>(
+          <button key={o.key} onClick={()=>{ setSelOs(o.key); setPage(1); }}
+            style={{ background: selOs===o.key ? o.color : "#1f2937",
+              color:"#fff", border:"none", borderRadius:8, padding:"7px 18px",
+              cursor:"pointer", fontWeight: selOs===o.key ? 700 : 500, fontSize:13 }}>
+            {o.icon} {o.label}
+          </button>
+        ))}
+        <button onClick={reimport} disabled={importing}
+          style={{ marginLeft:"auto", background:"#1f2937", color:"#e2e8f0",
+            border:"1px solid #374151", borderRadius:8, padding:"7px 16px",
+            cursor:importing?"default":"pointer", fontSize:13 }}>
+          {importing ? "Importing" : " Re-import Excel"}
+        </button>
+      </div>
+      {importMsg && (
+        <div style={{ background:"#0c4a6e", borderRadius:8, padding:"8px 14px",
+          color:"#7dd3fc", fontSize:12, marginBottom:10 }}>{importMsg}</div>
+      )}
+
+      <input value={search} onChange={e=>{ setSearch(e.target.value); setPage(1); }}
+        placeholder="Search CIS ID or title"
+        style={{ width:"100%", background:"#111827", border:"1px solid #374151", borderRadius:6,
+          color:"#e2e8f0", padding:"7px 12px", fontSize:13, marginBottom:10, boxSizing:"border-box" }} />
+
+      {loading ? <div style={{ color:"#6b7280" }}>Loading</div> : (
+        <div style={{ overflowX:"auto" }}>
+          <div style={{ color:"#6b7280", fontSize:12, marginBottom:6 }}>{data.total} rules</div>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:"#111827" }}>
+                {["CIS ID","Section","Title","Remediation (preview)","Desired Value","Enabled","Actions"].map(h=>(
+                  <th key={h} style={{ padding:"7px 10px", color:"#9ca3af",
+                    textAlign:"left", borderBottom:"1px solid #1f2937" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.rules.map((r,i)=>(
+                <tr key={i} style={{ borderBottom:"1px solid #111827" }}>
+                  <td style={{ padding:"7px 10px", color:"#a78bfa", fontFamily:"monospace", whiteSpace:"nowrap" }}>{r.cis_id}</td>
+                  <td style={{ padding:"7px 10px", color:"#6b7280" }}>{r.section}</td>
+                  <td style={{ padding:"7px 10px", color:"#e2e8f0", maxWidth:240 }}>{r.title}</td>
+                  <td style={{ padding:"7px 10px", color:"#6b7280", maxWidth:200,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {r.remediation ? r.remediation.substring(0,80)+"" : ""}
+                  </td>
+                  <td style={{ padding:"7px 10px", color:"#9ca3af" }}>{r.desired_value||""}</td>
+                  <td style={{ padding:"7px 10px" }}>
+                    <span style={{ color: r.enabled ? "#10b981":"#6b7280", fontWeight:600 }}>
+                      {r.enabled ? " Yes":" No"}
+                    </span>
+                  </td>
+                  <td style={{ padding:"7px 10px" }}>
+                    <button onClick={()=>{ setEditRow(r); setEditVal({ title:r.title, remediation:r.remediation, desired_value:r.desired_value, enabled:r.enabled }); }}
+                      style={{ background:"#374151", color:"#e2e8f0", border:"none",
+                        borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer" }}> Edit</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.pages > 1 && (
+            <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:12 }}>
+              <button disabled={page<=1} onClick={()=>setPage(p=>p-1)}
+                style={{ background:"#1f2937",color:page<=1?"#374151":"#e2e8f0",border:"none",borderRadius:5,padding:"4px 14px",cursor:page>1?"pointer":"default" }}></button>
+              <span style={{ color:"#6b7280", fontSize:12 }}>Page {page}/{data.pages}</span>
+              <button disabled={page>=data.pages} onClick={()=>setPage(p=>p+1)}
+                style={{ background:"#1f2937",color:page>=data.pages?"#374151":"#e2e8f0",border:"none",borderRadius:5,padding:"4px 14px",cursor:page<data.pages?"pointer":"default" }}></button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editRow && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+          <div style={{ background:"#111827", border:"1px solid #374151",
+            borderRadius:12, padding:24, width:520, maxHeight:"80vh", overflowY:"auto" }}>
+            <h3 style={{ color:"#f9fafb", margin:"0 0 14px" }}>Edit Baseline Rule  {editRow.cis_id}</h3>
+            {[["title","Title"], ["remediation","Remediation Command"], ["desired_value","Desired Value"]].map(([fld,lbl])=>(
+              <div key={fld} style={{ marginBottom:12 }}>
+                <label style={{ color:"#9ca3af", fontSize:12, display:"block", marginBottom:4 }}>{lbl}</label>
+                <textarea value={editVal[fld]||""} onChange={e=>setEditVal(v=>({...v,[fld]:e.target.value}))}
+                  style={{ width:"100%", background:"#0d1117", border:"1px solid #374151",
+                    borderRadius:6, color:"#e2e8f0", padding:"7px 10px", fontSize:12,
+                    minHeight:60, resize:"vertical", boxSizing:"border-box" }} />
+              </div>
+            ))}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ color:"#9ca3af", fontSize:12, marginRight:8 }}>Enabled:</label>
+              <input type="checkbox" checked={!!editVal.enabled}
+                onChange={e=>setEditVal(v=>({...v,enabled:e.target.checked}))} />
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={saveEdit} disabled={saving}
+                style={{ background:"#7c3aed", color:"#fff", border:"none",
+                  borderRadius:7, padding:"8px 20px", cursor:"pointer" }}>
+                {saving ? "Saving" : " Save"}
+              </button>
+              <button onClick={()=>setEditRow(null)}
+                style={{ background:"#374151", color:"#e2e8f0", border:"none",
+                  borderRadius:7, padding:"8px 20px", cursor:"pointer" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

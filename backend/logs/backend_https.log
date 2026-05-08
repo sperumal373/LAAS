@@ -595,3 +595,89 @@ INFO:     127.0.0.1:61818 - "POST /api/migration/plans HTTP/1.1" 200 OK
 [db] Initialized: C:\caas-dashboard\backend\caas.db
 [db] Initialized: C:\caas-dashboard\backend\caas.db
 [db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+INFO:     172.17.92.200:46008 - "POST /sdk HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42111 - "GET /sdk/vimServiceVersions.xml HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42416 - "GET /xmldata?item=all HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42620 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42647 - "GET / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42655 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42675 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:42685 - "HEAD / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7335 - "GET /sdk/vimServiceVersions.xml HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7460 - "GET /xmldata?item=all HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7469 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7481 - "GET / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7485 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7504 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:7514 - "HEAD / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32341 - "GET /sdk/vimServiceVersions.xml HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32536 - "GET /xmldata?item=all HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32607 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32617 - "GET / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32633 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32646 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:32653 - "HEAD / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5766 - "GET /sdk/vimServiceVersions.xml HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5875 - "GET /xmldata?item=all HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5882 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5885 - "GET / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5896 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5908 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:5916 - "HEAD / HTTP/1.1" 404 Not Found
+INFO:     172.17.92.200:47520 - "POST /sdk HTTP/1.1" 404 Not Found
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+INFO:     172.17.66.14:47104 - "GET /sdk/vimServiceVersions.xml HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47218 - "GET /xmldata?item=all HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47230 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47233 - "GET / HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47239 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47254 - "GET /univmax/ HTTP/1.1" 404 Not Found
+INFO:     172.17.66.14:47259 - "HEAD / HTTP/1.1" 404 Not Found
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+[db] Initialized: C:\caas-dashboard\backend\caas.db
+INFO:     172.17.92.200:38542 - "POST /sdk HTTP/1.1" 404 Not Found
