@@ -552,7 +552,15 @@ def orchestrate_migration(plan_db_row, log_fn=None):
 
     # Check if any VM has CBT disabled -> use cold migration
     # Determine warm/cold from user options, but override if CBT disabled
-    use_warm = options.get("warm", False)
+    # storage_offload=True enables warm (incremental) migration via CBT
+    storage_offload = options.get("storage_offload", True)
+    if storage_offload:
+        import logging as _logging
+        _logging.getLogger("mtv_client").info("⚡ Storage Offload: ENABLED -- warm migration (CBT incremental sync) active for OpenShift MTV")
+    else:
+        import logging as _logging
+        _logging.getLogger("mtv_client").info("○ Storage Offload: DISABLED -- cold (full copy) migration")
+    use_warm = options.get("warm", storage_offload)  # storage_offload drives warm mode
     for v in vm_ids:
         if v.get("cbt_disabled"):
             use_warm = False

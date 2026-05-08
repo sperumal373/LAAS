@@ -1,4 +1,4 @@
-﻿"""
+"""
 nutanix_move_client.py  --  Real Nutanix Move REST API v2.2 integration
 Connects to Nutanix Move appliance to orchestrate VM migrations from vCenter to AHV.
 Falls back to a realistic phased simulation if Move is unreachable.
@@ -20,8 +20,20 @@ MOVE_TIMEOUT = 15
 
 # vCenter credentials keyed by IP
 VCENTER_CREDS = {
+    "172.17.101.15":  ("administrator@vsphere.local", "Sdxdc@101-15"),
+    "172.17.101.17":  ("administrator@vsphere.local", "Sdxdc@101-17"),
     "172.17.168.212": ("administrator@vsphere.local", "Sdxdc@168-212"),
-    "172.17.101.15":  ("sdxtest\\yogesh", "Wipro@12345"),
+    "172.17.80.150":  ("administrator@vsphere.local", "Sdxdc@80-150"),
+    "172.17.73.191":  ("administrator@vsphere.local", "Sdxdc@73-191"),
+    "172.16.6.125":   ("administrator@vsphere.local", "Sdxdr@6-125"),
+}
+    "172.17.80.150":  ("administrator@vsphere.local", "Sdxdc@80-150"),
+    "172.17.73.191":  ("administrator@vsphere.local", "Sdxdc@73-191"),
+    "172.16.6.125":   ("administrator@vsphere.local", "Sdxdr@6-125"),
+}
+    "172.17.80.150":  ("administrator@vsphere.local", "Sdxdc@80-150"),
+    "172.17.73.191":  ("administrator@vsphere.local", "Sdxdc@73-191"),
+    "172.16.6.125":   ("administrator@vsphere.local", "Sdxdr@6-125"),
 }
 
 # Known Move provider UUID mapping  (source vCenter IP -> provider UUID)
@@ -344,6 +356,13 @@ def orchestrate_nutanix_migration(plan_id, plan_row, db_update_fn, log_fn):
     plan_name = plan_row.get("plan_name", f"plan-{plan_id}")
     source = plan_row.get("source_vcenter") or plan_row.get("source_detail") or ""
     target = plan_row.get("target_detail", "")
+
+    # Storage offload (Nutanix Move CBT Sync)
+    storage_offload = options.get("storage_offload", True)
+    if storage_offload:
+        log.info("⚡ Storage Offload (Nutanix Move CBT Sync): ENABLED -- incremental disk sync via CBT")
+    else:
+        log.info("○ Storage Offload (Nutanix Move CBT Sync): DISABLED")
 
     if is_move_reachable():
         log_fn(plan_id, f"Nutanix Move reachable at {MOVE_URL} - using real API", "system")

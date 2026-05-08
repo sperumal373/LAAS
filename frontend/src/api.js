@@ -775,6 +775,12 @@ export async function createHVCheckpoint(host_id, vm_name, name) { return _post(
 export async function deleteHVCheckpoint(host_id, vm_name, name) { return _post("/api/hyperv/checkpoint/delete", { host_id, vm_name, name }); }
 export async function restoreHVCheckpoint(host_id, vm_name, name){ return _post("/api/hyperv/checkpoint/restore", { host_id, vm_name, name }); }
 
+// ── HPE VM Essentials (VME) ───────────────────────────────────────────────────
+export async function fetchHPEVMEHosts()              { return _get("/api/hpevme/hosts"); }
+export async function saveHPEVMEHosts(hosts)          { return _post("/api/hpevme/hosts", { hosts }); }
+export async function fetchHPEVMEStatus()             { return _get("/api/hpevme/status"); }
+export async function fetchHPEVMEVMs(host_id)         { return _get(`/api/hpevme/vms${host_id ? "?host_id=" + encodeURIComponent(host_id) : ""}`); }
+
 // â”€â”€ LaaS AI â€” OpenAI Natural Language Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function sendAIChat(query, contextData) {
   return _post("/api/ai/chat", { query, context: contextData });
@@ -846,3 +852,36 @@ export async function addVMsToGroup(gid, vms, vcenter_id, vcenter_name) { return
 export async function removeVMFromGroup(gid, vid)    { return _delete("/api/migration/move-groups/" + gid + "/vms/" + vid); }
 export async function migrateGroup(gid, target_platform, target_detail, options) { return _post("/api/migration/move-groups/" + gid + "/migrate", {target_platform, target_detail: target_detail || {}, options: options || {}}); }
 
+// Zerto DR API
+
+// Zerto DR API
+export const fetchZertoSites = () => _get("/api/zerto/sites");
+export const fetchZertoSite = (id) => _get(`/api/zerto/sites/${id}`);
+export const createZertoSite = (b) => _post("/api/zerto/sites", b);
+export const deleteZertoSite = (id) => _delete(`/api/zerto/sites/${id}`);
+export const testZertoSite = (id) => _post(`/api/zerto/sites/${id}/test`, {});
+export const fetchZertoDashboard = (id) => _get(`/api/zerto/sites/${id}/dashboard`);
+export const fetchZertoVPGs = (id) => _get(`/api/zerto/sites/${id}/vpgs`);
+export const fetchZertoVMs = (id) => _get(`/api/zerto/sites/${id}/vms`);
+export const fetchZertoAlerts = (id) => _get(`/api/zerto/sites/${id}/alerts`);
+export const dismissZertoAlert = (id, aid) => _post(`/api/zerto/sites/${id}/alerts/${aid}/dismiss`, {});
+export const fetchZertoTasks = (id) => _get(`/api/zerto/sites/${id}/tasks`);
+export const fetchZertoEvents = (id) => _get(`/api/zerto/sites/${id}/events`);
+export const fetchZertoReports = (id) => _get(`/api/zerto/sites/${id}/reports`);
+export const fetchZertoAuditLog = (id) => _get(`/api/zerto/sites/${id}/audit`);
+export const fetchZertoCheckpoints = (id, vid) => _get(`/api/zerto/sites/${id}/vpgs/${vid}/checkpoints`);
+export const zertoTestFailover = (id, vid, vn, cp) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/test-failover`, {vpg_name:vn, checkpoint_id:cp});
+export const zertoStopTestFailover = (id, vid, vn, ok, notes) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/stop-test`, {vpg_name:vn, success:ok, notes:notes||""});
+export const zertoLiveFailover = (id, vid, vn, opts) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/live-failover`, Object.assign({vpg_name:vn}, opts||{}));
+export const zertoCommitFailover = (id, vid, vn, rp) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/commit-failover`, {vpg_name:vn, reverse_protection:!!rp});
+export const zertoRollbackFailover = (id, vid, vn) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/rollback-failover`, {vpg_name:vn});
+export const zertoMoveVPG = (id, vid, vn, opts) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/move`, Object.assign({vpg_name:vn}, opts||{}));
+export const zertoFailback = (id, vid, vn, opts) => _post(`/api/zerto/sites/${id}/vpgs/${vid}/failback`, Object.assign({vpg_name:vn}, opts||{}));
+
+// Zerto VPG management
+export const createZertoVPG = (siteId, body) => _post(`/api/zerto/sites/${siteId}/vpgs`, body);
+export const deleteZertoVPG = (siteId, vpgId) => _delete(`/api/zerto/sites/${siteId}/vpgs/${vpgId}`);
+export const fetchZertoPeerSites = (siteId) => _get(`/api/zerto/sites/${siteId}/peersites`);
+export const fetchZertoTask = (siteId, taskId) => _get(`/api/zerto/sites/${siteId}/tasks/${taskId}`);
+export const fetchZertoVirtSites = (siteId) => _get(`/api/zerto/sites/${siteId}/virtualizationsites`);
+export const fetchZertoVirtSiteVMs = (siteId, vsId) => _get(`/api/zerto/sites/${siteId}/virtualizationsites/${vsId}/vms`);

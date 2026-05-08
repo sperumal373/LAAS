@@ -12764,12 +12764,15 @@ function NotifEditor({notifs,onSave,onClose,p}){
 // OpenShift page - code-split for performance
 import OpenShiftPage from './OpenShiftPage';
 import MigrationPage from './MigrationPage';
+import CompliancePage from './CompliancePage';
 // Nutanix page - code-split for performance
 import NutanixPage from './NutanixPage';
 // Ansible Automation Platform page - code-split for performance
 import AnsiblePage from './AnsiblePage';
 // IPAM v2 — Self-hosted PostgreSQL IPAM module
 import IPAMPage from './IPAMPage';
+
+import ZertoPage from "./ZertoPage";
 
 
 //  VOLUME TOPOLOGY MODAL 
@@ -20250,6 +20253,8 @@ function Sidebar({page,setPage,vcenters,selectedVC,summaries,loading,error,alert
     {id:"aws",       label:"Amazon Web Services",      icon:"☁️",  roles:["admin","operator","viewer"]},
     {id:"hyperv",    label:"Microsoft Hyper-V",         icon:"🪟",  roles:["admin","operator","viewer"]},
     {id:"migration",  label:"Magic Migrate",       icon:"✨",  roles:["admin","operator","viewer"]},
+    {id:"dr",        label:"Disaster Recovery",  icon:"🔄",  roles:["admin","operator","viewer"]},
+    {id:"compliance", label:"CompliSphere",          icon:"🛡️",  roles:["admin","operator","viewer"]},
     {id:"project_utilization", label:"Project Utilization", icon:"🏷️", roles:["admin","operator","viewer"]},
     {id:"capacity",  label:"Capacity",   icon:"🗄️", roles:["admin","operator","viewer"]},
     {id:"chargeback",label:"Chargeback",  icon:"💳", roles:["admin","operator","viewer"]},
@@ -20273,7 +20278,7 @@ function Sidebar({page,setPage,vcenters,selectedVC,summaries,loading,error,alert
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           <div style={{width:64,height:64,borderRadius:12,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 2px 10px rgba(0,0,0,0.12)",overflow:"hidden"}}><img src="/wipro-logo.jpg" alt="Wipro" style={{width:58,height:58,objectFit:"contain"}} /></div>
           <div>
-            <div style={{fontWeight:800,fontSize:24,lineHeight:1.1,letterSpacing:"-.3px",fontSize:24,lineHeight:1.1,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Solution Sphere</div>
+            <div style={{fontWeight:800,fontSize:24,lineHeight:1.1,letterSpacing:".6px",background:"linear-gradient(135deg,#f97316,#facc15,#f59e0b)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Georgia','Times New Roman',serif",filter:"drop-shadow(0 0 8px rgba(249,115,22,0.25))"}}>Solution Sphere</div>
             <div style={{fontSize:13,color:p.accent,marginTop:2,letterSpacing:"1px",fontWeight:700,textTransform:"uppercase"}}>CISS-COE Infrastructure</div>
             <div style={{fontSize:14,color:p.cyan,marginTop:2,letterSpacing:".5px",fontWeight:700,fontStyle:"normal",opacity:1}}>Lab as a Service</div>
           </div>
@@ -21879,7 +21884,7 @@ Access is controlled by four roles — Admin, Operator, Viewer, and Requester �
 
   if(!loggedIn) return <><style>{G(p)}</style><Login onLogin={(u)=>{setCurrentUser(u);setLoggedIn(true);}} p={p}/></>;
 
-  const navLabels={migration:"Magic Migrate",overview:"Overview",vms:"VMware",project_utilization:"Project Utilization",capacity:"Capacity",snapshots:"Snapshots",networks:"Networks",ipam:"IPAM",requests:"VM Requests",audit:"Audit Log",users:"User Management",storage:"Storage",backup:"Backup"};
+  const navLabels={migration:"Magic Migrate",compliance:"CompliSphere",overview:"Overview",vms:"VMware",project_utilization:"Project Utilization",capacity:"Capacity",snapshots:"Snapshots",networks:"Networks",ipam:"IPAM",requests:"VM Requests",audit:"Audit Log",users:"User Management",storage:"Storage",backup:"Backup"};
 
   // Fix 6: notification ticker — only show real alerts/events, not resource stats
   const notifItems = [
@@ -21912,6 +21917,7 @@ Access is controlled by four roles — Admin, Operator, Viewer, and Requester �
     {id:"audit",      label:"Audit Log",           icon:"📝", desc:"Activity history & change tracking"},
     {id:"users",      label:"Users",               icon:"👥", desc:"User management & role assignment"},
     {id:"migration",  label:"Magic Migrate",      icon:"✨", desc:"Cross-hypervisor VM migration wizard"},
+    {id:"dr",         label:"Disaster Recovery",  icon:"🔄", desc:"Zerto DR · VPG health · failover"},
     {id:"project_utilization",label:"Project Utilization",icon:"📊",desc:"Team & project VM utilization charts"},
   ];
   const _allPeople=[...SUPPORT_MATRIX.leadership,...SUPPORT_MATRIX.domains.flatMap(d=>d.team.filter(m=>m.email))];
@@ -22215,7 +22221,9 @@ Access is controlled by four roles — Admin, Operator, Viewer, and Requester �
             {page==="backup"    &&<PageErrorBoundary page="Backup"><BackupPage  currentUser={currentUser} p={p}/></PageErrorBoundary>}
             {page==="aws"      &&<PageErrorBoundary page="AWS"><AWSPage currentUser={currentUser} p={p}/></PageErrorBoundary>}
             {page==="hyperv"   &&<PageErrorBoundary page="Hyper-V"><HyperVPage currentUser={currentUser} p={p}/></PageErrorBoundary>}
-            {page==="migration" &&<PageErrorBoundary page="Magic Migrate"><MigrationPage currentUser={currentUser} p={p}/></PageErrorBoundary>}
+            {page==="migration"  &&<PageErrorBoundary page="Magic Migrate"><MigrationPage currentUser={currentUser} p={p}/></PageErrorBoundary>}
+            {page === "dr" && <ZertoPage p={p} currentUser={currentUser} />}
+            {page==="compliance" &&<PageErrorBoundary page="CompliSphere"><CompliancePage currentUser={currentUser} p={p}/></PageErrorBoundary>}
             {page==="project_utilization" &&<PageErrorBoundary page="Project Utilization"><ProjectUtilizationPage selectedVC={selectedVC} currentUser={currentUser} p={p}/></PageErrorBoundary>}
             {page==="capacity"  &&<CapacityPage hosts={hosts} datastores={datastores} vcenters={vcenters} selectedVC={selectedVC} currentUser={currentUser} onRefresh={silentLoad} ocpData={ocpData} nutData={nutData} initSearch={searchHL?.page==="capacity"?searchHL.term:""} summaries={summaries} {...cp}/>}
             {page==="chargeback" &&<ChargebackPage currentUser={currentUser} p={p}/>}

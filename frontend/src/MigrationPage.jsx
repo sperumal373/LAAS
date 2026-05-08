@@ -4,15 +4,17 @@ import {
   fetchOCPClusters, fetchOCPOperators, fetchOCPLiveNodes, fetchOCPStorageClasses,
   fetchNutanixPCs, fetchNutanixOverview, fetchNutanixClusters, fetchNutanixHosts, fetchNutanixStorage,
   fetchHVHosts, fetchHVStatus, fetchHVVMs,
+  fetchHPEVMEHosts, fetchHPEVMEStatus,
   fetchDatastores, fetchNetworks,
   fetchMigrationPlans, createMigrationPlan, deleteMigrationPlan, updatePlanStatus, executeMigrationPlan, fetchPlanEvents, runPreflightCheck,
   fetchMoveGroups, createMoveGroup, deleteMoveGroup, addVMsToGroup, removeVMFromGroup, migrateGroup,
   getToken,
 } from "./api";
+import ReportDashboard from "./MigrationReportDashboard";
 
 /* ============================================================
    Magic Migrate - Cross-Hypervisor VM Migration Wizard
-   Source: VMware | Target: OpenShift / Nutanix / Hyper-V
+   Source: VMware | Target: OpenShift / Nutanix / Hyper-V / HPE VME
    ============================================================ */
 
 const STEPS = [
@@ -24,9 +26,10 @@ const STEPS = [
 ];
 
 const TARGETS = [
-  { id: "openshift", label: "Red Hat OpenShift", sub: "KubeVirt Virtualization", icon: "🔴", color: "#ef4444", gradient: "linear-gradient(135deg,#ef4444,#dc2626)" },
-  { id: "nutanix",   label: "Nutanix AHV",       sub: "Acropolis Hypervisor",   icon: "🟩", color: "#10b981", gradient: "linear-gradient(135deg,#10b981,#059669)" },
-  { id: "hyperv",    label: "Microsoft Hyper-V",  sub: "Windows Server Virtualization", icon: "🪩", color: "#3b82f6", gradient: "linear-gradient(135deg,#3b82f6,#2563eb)" },
+  { id: "openshift", label: "Red Hat OpenShift", sub: "KubeVirt Virtualization", icon: "/logos/redhat.svg",  color: "#ef4444", gradient: "linear-gradient(135deg,#ef4444,#dc2626)" },
+  { id: "nutanix",   label: "Nutanix AHV",       sub: "Acropolis Hypervisor",           icon: "/logos/nutanix.svg", color: "#10b981", gradient: "linear-gradient(135deg,#10b981,#059669)" },
+  { id: "hyperv",    label: "Microsoft Hyper-V",  sub: "Windows Server Virtualization",  icon: "/logos/hyperv.svg",  color: "#3b82f6", gradient: "linear-gradient(135deg,#3b82f6,#2563eb)" },
+  { id: "hpevme",   label: "HPE VM Essentials", sub: "HPE KVM Hypervisor (VME)",         icon: "/logos/hpevme.svg",  color: "#0096d6", gradient: "linear-gradient(135deg,#0096d6,#006494)" },
 ];
 
 function LoadDots({ p }) {
@@ -131,7 +134,7 @@ function PlaybookDropdown({ aapId, groupId, value, onSelect, p }) {
 }
 
 export default function MigrationPage({ currentUser, p }) {
-  const [tab, setTab] = useState("new"); // "new" | "plans"
+  const [tab, setTab] = useState("new"); // "new" | "plans" | "groups" | "reports"
   const [step, setStep] = useState(0);
   const [toast, setToast] = useState(null);
 
@@ -157,6 +160,7 @@ export default function MigrationPage({ currentUser, p }) {
   const [nutPCs, setNutPCs] = useState([]);
   const [nutClusters, setNutClusters] = useState([]);
   const [hvHosts, setHvHosts] = useState([]);
+  const [hpevmeHosts, setHpevmeHosts] = useState([]);
   const [targetDetail, setTargetDetail] = useState({});
   const [loadingTarget, setLoadingTarget] = useState(false);
 
@@ -208,6 +212,7 @@ export default function MigrationPage({ currentUser, p }) {
   const [migSkipConvert, setMigSkipConvert] = useState(false);
   const [migPreserveIPs, setMigPreserveIPs] = useState(false);
   const [migPreflight, setMigPreflight] = useState(true);
+  const [storageOffload, setStorageOffload] = useState(true);
   const [migTargetNS, setMigTargetNS] = useState("openshift-mtv");
   const [migNotes, setMigNotes] = useState("");
   const [migSchedule, setMigSchedule] = useState("");
@@ -407,6 +412,8 @@ export default function MigrationPage({ currentUser, p }) {
     setTargetPlatform(platform);
     setTargetDetail({});
     setLoadingTarget(true);
+    // Reset storage offload to platform default
+    setStorageOffload(true);
     try {
       if (platform === "openshift") {
         const r = await fetchOCPClusters();
@@ -418,6 +425,9 @@ export default function MigrationPage({ currentUser, p }) {
       } else if (platform === "hyperv") {
         const r = await fetchHVStatus();
         setHvHosts((Array.isArray(r) ? r : r.hosts || []).filter(h => h.success === true));
+      } else if (platform === "hpevme") {
+        const r = await fetchHPEVMEStatus();
+        setHpevmeHosts((Array.isArray(r) ? r : r.hosts || []));
       }
     } catch { showToast("Failed to load target data", "error"); }
     setLoadingTarget(false);
@@ -470,6 +480,9 @@ export default function MigrationPage({ currentUser, p }) {
         } else if (targetPlatform === "hyperv") {
           setTargetNetworks([{ name: "Default Switch" }, { name: "External Switch" }, { name: "Private Switch" }]);
           setTargetStorage([{ name: "C:\\Hyper-V\\Virtual Hard Disks" }, { name: "D:\\VMs" }]);
+        } else if (targetPlatform === "hpevme") {
+          setTargetNetworks([{ name: "Default Network" }, { name: "VME Management" }, { name: "VM Network" }]);
+          setTargetStorage([{ name: "/var/lib/libvirt/images" }, { name: "/vme-storage/vms" }]);
         }
       }).catch(() => {});
     }
@@ -480,7 +493,7 @@ export default function MigrationPage({ currentUser, p }) {
     if (!planName.trim()) { showToast("Please enter a plan name", "error"); return; }
     setSaving(true);
     try {
-      const tool = { openshift: "MTV (Migration Toolkit for Virtualization)", nutanix: "Nutanix Move", hyperv: "Manual (VMDK → VHDX Conversion)" }[targetPlatform] || "";
+      const tool = { openshift: "MTV (Migration Toolkit for Virtualization)", nutanix: "Nutanix Move", hyperv: "SCVMM V2V", hpevme: "HPE VME API (VMDK → qcow2)" }[targetPlatform] || "";
       await createMigrationPlan({
         plan_name: planName,
         source_platform: "vmware",
@@ -501,6 +514,7 @@ export default function MigrationPage({ currentUser, p }) {
           skip_guest_conversion: migSkipConvert,
           preserve_static_ips: migPreserveIPs,
           run_preflight: migPreflight,
+          storage_offload: storageOffload,
           target_namespace: migTargetNS,
           schedule: migSchedule || null,
           cutover_mode: migCutoverMode,
@@ -680,7 +694,7 @@ export default function MigrationPage({ currentUser, p }) {
         <div style={{ flex: 1 }} />
         {/* Tab toggle */}
         <div style={{ display: "flex", background: p.surface, borderRadius: 10, border: `1px solid ${p.border}`, overflow: "hidden" }}>
-          {[["new", "✨ New Migration"], ["groups", "📦 Move Groups"], ["plans", "📋 Plans"]].map(([id, label]) => (
+          {[["new", "✨ New Migration"], ["groups", "📦 Move Groups"], ["plans", "📋 Plans"], ["reports", "📊 Reports"]].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               padding: "8px 20px", fontSize: 12, fontWeight: 700, border: "none", cursor: "pointer",
               background: tab === id ? p.accent : "transparent", color: tab === id ? "#fff" : p.textSub,
@@ -827,7 +841,13 @@ export default function MigrationPage({ currentUser, p }) {
                   boxShadow: targetPlatform === t.id ? `0 4px 20px ${t.color}20` : "none",
                   transform: targetPlatform === t.id ? "scale(1.02)" : "scale(1)",
                 }}>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>{t.icon}</div>
+                  <div style={{ height: 52, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {t.icon.startsWith("/") ? (
+                      <img src={t.icon} alt={t.label} style={{ height: 48, width: 48, objectFit: "contain", borderRadius: 8, background: "#fff", padding: 3, boxShadow: "0 1px 6px #0002" }} />
+                    ) : (
+                      <span style={{ fontSize: 36 }}>{t.icon}</span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 20, fontWeight: 900, color: p.text }}>{t.label}</div>
                   <div style={{ fontSize: 11, color: p.textMute, marginTop: 2 }}>{t.sub}</div>
                   {targetPlatform === t.id && <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: t.color }}>✓ Selected</div>}
@@ -867,6 +887,24 @@ export default function MigrationPage({ currentUser, p }) {
                     {hvHosts.map(h => <option key={h.id} value={h.id}>{h.hostname || h.ip}</option>)}
                   </select>
                   {hvHosts.length === 0 && <div style={{ fontSize: 12, color: p.yellow, marginTop: 8 }}>⚠️ No connected Hyper-V hosts found</div>}
+                </>)}
+                {targetPlatform === "hpevme" && (<>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: p.textSub, marginBottom: 6, display: "block" }}>HPE VM Essentials Host</label>
+                  <select value={targetDetail.host_id || ""} onChange={e => {
+                    const h = hpevmeHosts.find(h => h.id === e.target.value) || hpevmeHosts[0];
+                    setTargetDetail({ host_id: e.target.value, host_name: h?.name || h?.host, host: h?.host });
+                  }} style={selectStyle}>
+                    <option value="">-- Select HPE VME Host --</option>
+                    {hpevmeHosts.map(h => <option key={h.id} value={h.id}>{h.name || h.host} ({h.host})</option>)}
+                  </select>
+                  {hpevmeHosts.length === 0 && (
+                    <div style={{ fontSize: 12, color: "#0096d6", marginTop: 8 }}>
+                      ℹ️ Using default HPE VME host: 172.17.65.80
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: p.textMute, marginTop: 8 }}>
+                    Target: KVM-based HPE VM Essentials. VMs will be converted VMDK → qcow2.
+                  </div>
                 </>)}
               </div>
             )}
@@ -1014,8 +1052,8 @@ export default function MigrationPage({ currentUser, p }) {
                         <td style={tdStyle}><span style={{ fontWeight: 600 }}>{m.source}</span></td>
                         <td style={{ ...tdStyle, textAlign: "center", color: p.purple }}>➔</td>
                         <td style={tdStyle}>
-                          {targetPlatform === "hyperv" ? (
-                            <input value={m.target} onChange={e => { const sm = [...storageMap]; sm[i].target = e.target.value; setStorageMap(sm); }} placeholder="e.g. D:\\VMs\\Disks" style={inputStyle} />
+                          {(targetPlatform === "hyperv" || targetPlatform === "hpevme") ? (
+                            <input value={m.target} onChange={e => { const sm = [...storageMap]; sm[i].target = e.target.value; setStorageMap(sm); }} placeholder={targetPlatform === "hpevme" ? "e.g. /var/lib/libvirt/images" : "e.g. D:\\VMs\\Disks"} style={inputStyle} />
                           ) : (
                             <select value={m.target} onChange={e => { const sm = [...storageMap]; sm[i].target = e.target.value; setStorageMap(sm); }} style={selectStyle}>
                               <option value="">-- Select --</option>
@@ -1029,6 +1067,124 @@ export default function MigrationPage({ currentUser, p }) {
                 </table>
               </div>
             </div>
+
+            {/* ── Storage Offload ── */}
+            {(() => {
+              const offloadCfg = {
+                openshift: {
+                  label: "Warm Migration (CBT)",
+                  icon: "⚡",
+                  color: "#ef4444",
+                  description: "Transfer only changed disk blocks using VMware CBT. VM stays running during replication — minimal downtime at cutover.",
+                  benefit: "Cuts transfer time by up to 80% for active VMs",
+                  requires: "CBT must be enabled on source VM",
+                },
+                nutanix: {
+                  label: "Nutanix Move CBT Sync",
+                  icon: "⚡",
+                  color: "#10b981",
+                  description: "Nutanix Move uses VMware CBT with inline compression. Only changed blocks are synced — no full disk re-transfer on each cycle.",
+                  benefit: "Inline compression + delta sync reduces bandwidth",
+                  requires: "Nutanix Move agent connectivity to vCenter",
+                },
+                hyperv: {
+                  label: "ODX Offload Transfer",
+                  icon: "🔀",
+                  color: "#3b82f6",
+                  description: "Windows Offloaded Data Transfer (ODX) copies disk data directly at the storage array level, bypassing host CPU and network where supported.",
+                  benefit: "Zero host CPU/network load on ODX-capable arrays",
+                  requires: "ODX-capable storage (NetApp, Pure Storage, HPE, EMC)",
+                },
+                hpevme: {
+                  label: "HPE Array Offload",
+                  icon: "⚡",
+                  color: "#0096d6",
+                  description: "HPE Nimble / Alletra / Primera volumes copied at array REST API level — no disk data traverses host network during migration.",
+                  benefit: "Near-instant volume clone on HPE storage arrays",
+                  requires: "HPE Nimble, Alletra or Primera storage array",
+                },
+              };
+              const cfg = offloadCfg[targetPlatform];
+              if (!cfg) return null;
+              return (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: p.text, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                    ⚡ Storage Offload
+                    <span style={{ fontSize: 11, fontWeight: 600, color: p.textMute, background: `${p.border}40`, padding: "2px 10px", borderRadius: 20 }}>
+                      {targetPlatform.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{
+                    borderRadius: 12,
+                    border: `1.5px solid ${storageOffload ? cfg.color + "55" : p.border}`,
+                    background: storageOffload ? `${cfg.color}08` : p.panelAlt,
+                    padding: "18px 20px",
+                    transition: "all .25s ease",
+                    boxShadow: storageOffload ? `0 2px 20px ${cfg.color}15` : "none",
+                  }}>
+                    {/* Header: icon + label + toggle */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14 }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                        background: `${cfg.color}18`, display: "flex", alignItems: "center",
+                        justifyContent: "center", fontSize: 20,
+                        border: `1px solid ${cfg.color}30`,
+                      }}>{cfg.icon}</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 800, fontSize: 14.5, color: storageOffload ? cfg.color : p.text, marginBottom: 4 }}>
+                          {cfg.label}
+                        </div>
+                        <div style={{ fontSize: 12, color: p.textMute, lineHeight: 1.5 }}>{cfg.description}</div>
+                      </div>
+                      {/* Toggle */}
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                        <div onClick={() => setStorageOffload(v => !v)} style={{
+                          width: 54, height: 28, borderRadius: 14,
+                          background: storageOffload ? cfg.color : `${p.border}80`,
+                          cursor: "pointer", position: "relative",
+                          transition: "background .22s ease",
+                          boxShadow: storageOffload ? `0 0 14px ${cfg.color}50` : "none",
+                        }}>
+                          <div style={{
+                            position: "absolute", top: 3,
+                            left: storageOffload ? 28 : 3,
+                            width: 22, height: 22, borderRadius: "50%",
+                            background: "#fff",
+                            transition: "left .22s ease",
+                            boxShadow: "0 1px 5px #0004",
+                          }} />
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: storageOffload ? cfg.color : p.textMute }}>
+                          {storageOffload ? "ON" : "OFF"}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Info pills */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <div style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        padding: "4px 12px", borderRadius: 20,
+                        background: `${cfg.color}12`, border: `1px solid ${cfg.color}28`,
+                        fontSize: 11, color: cfg.color, fontWeight: 700,
+                      }}>✓ {cfg.benefit}</div>
+                      <div style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        padding: "4px 12px", borderRadius: 20,
+                        background: `${p.border}25`, border: `1px solid ${p.border}`,
+                        fontSize: 11, color: p.textMute, fontWeight: 600,
+                      }}>⚙ Requires: {cfg.requires}</div>
+                      <div style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        padding: "4px 12px", borderRadius: 20,
+                        background: storageOffload ? `${cfg.color}12` : `${p.border}25`,
+                        border: `1px solid ${storageOffload ? cfg.color + "40" : p.border}`,
+                        fontSize: 11, color: storageOffload ? cfg.color : p.textMute, fontWeight: 700,
+                      }}>{storageOffload ? "● ENABLED" : "○ DISABLED"}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <button onClick={() => setStep(2)} style={btnOutline}>← Back</button>
@@ -1606,6 +1762,16 @@ export default function MigrationPage({ currentUser, p }) {
           </div>
         </div>
       )}
+
+      {/* ======================== REPORTS TAB ======================== */}
+      {tab === "reports" && (
+        <div style={{ padding: "20px 0" }}>
+          <ReportDashboard p={p} currentUser={currentUser} />
+        </div>
+      )}
+
+
+
     </div>
   );
 }

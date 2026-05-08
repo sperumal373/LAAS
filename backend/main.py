@@ -4556,6 +4556,67 @@ from hyperv_client import (
     hv_create_checkpoint, hv_delete_checkpoint, hv_restore_checkpoint,
 )
 
+# ── HPE VM Essentials (VME) host config ──────────────────────────────
+import json as _hpevme_json
+
+def _get_hpevme_hosts():
+    """Load HPE VME hosts from DB (settings table)."""
+    from db import get_conn
+    with get_conn() as c:
+        row = c.execute("SELECT value FROM settings WHERE key='hpevme_hosts'").fetchone()
+    if row:
+        try: return _hpevme_json.loads(row[0])
+        except: pass
+    # Return default pre-configured host
+    return [{"id": "1", "host": "172.17.65.80", "name": "HPE VME",
+             "username": "user1", "password": "Wipro@123"}]
+
+def _save_hpevme_hosts(hosts):
+    from db import get_conn
+    with get_conn() as c:
+        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('hpevme_hosts',?)",
+                  (_hpevme_json.dumps(hosts),))
+    return {"ok": True}
+
+class HPEVMEHostsBody(BaseModel):
+    hosts: list
+
+@app.get("/api/hpevme/hosts")
+def hpevme_hosts_ep(u=Depends(get_current_user)):
+    """Return configured HPE VME hosts (passwords masked)."""
+    hosts = _get_hpevme_hosts()
+    masked = [{**h, "password": "***" if h.get("password") else ""} for h in hosts]
+    return {"hosts": masked}
+
+@app.post("/api/hpevme/hosts")
+def hpevme_hosts_save_ep(body: HPEVMEHostsBody, u=Depends(require_role("admin"))):
+    """Save/update HPE VME host list."""
+    result = _save_hpevme_hosts(body.hosts)
+    audit(u["username"], "HPEVME_HOSTS_SAVE", detail=f"{len(body.hosts)} host(s)", role=u["role"])
+    return result
+
+@app.get("/api/hpevme/status")
+def hpevme_status_ep(u=Depends(get_current_user)):
+    """Test connectivity to all configured HPE VME hosts."""
+    from hpevme_migrate import test_hpevme_connection
+    hosts = _get_hpevme_hosts()
+    if not hosts:
+        return {"hosts": [], "message": "No HPE VME hosts configured"}
+    results = []
+    for h in hosts:
+        r = test_hpevme_connection(h)
+        results.append({"id": h["id"], "host": h["host"], "name": h.get("name",""), **r})
+    return {"hosts": results}
+
+@app.get("/api/hpevme/vms")
+def hpevme_vms_ep(host_id: str = None, u=Depends(get_current_user)):
+    """List VMs from HPE VME inventory."""
+    from hpevme_migrate import list_hpevme_vms
+    hosts = _get_hpevme_hosts()
+    target = next((h for h in hosts if h["id"] == host_id), hosts[0] if hosts else {})
+    vms = list_hpevme_vms(target)
+    return {"vms": vms}
+
 class HVHostsBody(BaseModel):
     hosts: list
 
@@ -6924,6 +6985,36 @@ def execute_migration(plan_id: int, u=Depends(require_role("admin","operator")))
                         c.execute("UPDATE migration_plans SET status=?, progress=?, updated_at=datetime('now') WHERE id=?", (status, progress, pid))
             orchestrate_hyperv_migration(plan_id, plan_data, _db_upd, _migration_log)
         threading.Thread(target=_run_hyperv, daemon=True).start()
+    elif target == "hpevme":
+        # Real VMware -> HPE VME migration
+        def _run_hpevme():
+            from db import get_conn as _gc
+            from hpevme_migrate import orchestrate_hpevme_migration
+            import json as _json
+            # Inject actual credentials from host config into target_detail
+            try:
+                td = _json.loads(plan_data.get("target_detail", "{}") or "{}")
+                hpevme_hosts = _get_hpevme_hosts()
+                hid = str(td.get("host_id", "1"))
+                hcfg = next((h for h in hpevme_hosts if str(h["id"]) == hid), hpevme_hosts[0] if hpevme_hosts else {})
+                td["host"]     = hcfg.get("host", td.get("host", "172.17.65.80"))
+                td["username"] = hcfg.get("username", "user1")
+                td["password"] = hcfg.get("password", "Wipro@123")
+                plan_data["target_detail"] = _json.dumps(td)
+            except Exception: pass
+            with _gc() as c:
+                c.execute("UPDATE migration_plans SET status='executing', progress=0, started_at=datetime('now'), updated_at=datetime('now') WHERE id=?", (plan_id,))
+                row = c.execute("SELECT plan_name, source_vcenter, target_detail, vm_list, options FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
+            pd2 = dict(row) if row else {}
+            pd2["target_detail"] = plan_data.get("target_detail", pd2.get("target_detail"))
+            def _db_upd(pid, status, progress):
+                with _gc() as c:
+                    if status == "completed":
+                        c.execute("UPDATE migration_plans SET status=?, progress=?, completed_at=datetime('now'), updated_at=datetime('now') WHERE id=?", (status, progress, pid))
+                    else:
+                        c.execute("UPDATE migration_plans SET status=?, progress=?, updated_at=datetime('now') WHERE id=?", (status, progress, pid))
+            orchestrate_hpevme_migration(plan_id, pd2, _db_upd, _migration_log)
+        threading.Thread(target=_run_hpevme, daemon=True).start()
     else:
         # Other targets: realistic phased simulation
         def _run_sim():
@@ -6977,6 +7068,316 @@ def get_plan_events(plan_id: int, u=Depends(require_role("admin","operator","vie
 
 
 # ---- Move Groups ----
+
+# ============================================================
+# MIGRATION REPORT ENDPOINTS
+# ============================================================
+
+@app.get("/api/migration/plans/{plan_id}/report")
+def get_plan_report(plan_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json
+    from fastapi.responses import JSONResponse
+    with get_conn() as c:
+        row = c.execute("SELECT * FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Plan not found"})
+    d = dict(row)
+    try: d["vm_list"] = _json.loads(d.get("vm_list") or "[]")
+    except: d["vm_list"] = []
+    try: d["event_log"] = _json.loads(d.get("event_log") or "[]")
+    except: d["event_log"] = []
+    try: d["target_detail"] = _json.loads(d.get("target_detail") or "{}")
+    except: d["target_detail"] = {}
+    total_vms = len(d["vm_list"])
+    ok_events  = [e for e in d["event_log"] if "[OK]"   in e.get("msg","")]
+    fail_events= [e for e in d["event_log"] if "[FAIL]" in e.get("msg","")]
+    warn_events= [e for e in d["event_log"] if "[WARN]" in e.get("msg","")]
+    duration_sec = None
+    if d.get("started_at") and d.get("completed_at"):
+        try:
+            from datetime import datetime
+            s  = datetime.strptime(d["started_at"][:19],  "%Y-%m-%d %H:%M:%S")
+            e2 = datetime.strptime(d["completed_at"][:19],"%Y-%m-%d %H:%M:%S")
+            duration_sec = int((e2 - s).total_seconds())
+        except: pass
+    return {
+        "plan_id": plan_id, "plan_name": d.get("plan_name"),
+        "source_platform": d.get("source_platform","VMware"),
+        "source_vcenter": d.get("source_vcenter"),
+        "target_platform": d.get("target_platform"),
+        "target_detail": d.get("target_detail"),
+        "status": d.get("status"), "progress": d.get("progress",0),
+        "created_by": d.get("created_by"), "approved_by": d.get("approved_by"),
+        "created_at": d.get("created_at"), "started_at": d.get("started_at"),
+        "completed_at": d.get("completed_at"), "duration_seconds": duration_sec,
+        "summary": {"total_vms": total_vms, "succeeded": len(ok_events),
+                    "failed": len(fail_events), "warnings": len(warn_events)},
+        "vms": d["vm_list"], "event_log": d["event_log"], "notes": d.get("notes"),
+    }
+
+@app.get("/api/migration/plans/{plan_id}/report/download")
+def download_plan_report(plan_id: int, fmt: str = "json", u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json, io, csv
+    from fastapi.responses import StreamingResponse, JSONResponse
+    with get_conn() as c:
+        row = c.execute("SELECT * FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    d = dict(row)
+    try: d["vm_list"] = _json.loads(d.get("vm_list") or "[]")
+    except: d["vm_list"] = []
+    try: d["event_log"] = _json.loads(d.get("event_log") or "[]")
+    except: d["event_log"] = []
+    plan_name_safe = (d.get("plan_name","plan") or "plan").replace(" ","_").replace("/","_")
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Plan","Status","Target","Created By","Started","Completed","Progress%"])
+        writer.writerow([d.get("plan_name"),d.get("status"),d.get("target_platform"),
+                         d.get("created_by"),d.get("started_at"),d.get("completed_at"),d.get("progress",0)])
+        writer.writerow([])
+        writer.writerow(["VM Name","CPU","Memory MB","Disk GB","Power State","IP"])
+        for vm in d["vm_list"]:
+            if isinstance(vm,dict):
+                writer.writerow([vm.get("name",""),vm.get("cpu",""),vm.get("memory_mb",""),
+                                 vm.get("disk_gb",""),vm.get("power_state",""),vm.get("ip_address","")])
+        writer.writerow([])
+        writer.writerow(["Timestamp","Message","User"])
+        for ev in d["event_log"]:
+            writer.writerow([ev.get("ts",""),ev.get("msg",""),ev.get("user","system")])
+        output.seek(0)
+        return StreamingResponse(output, media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{plan_name_safe}_report.csv"'})
+    content = _json.dumps(d, indent=2, default=str)
+    return StreamingResponse(io.BytesIO(content.encode()), media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{plan_name_safe}_report.json"'})
+
+@app.get("/api/migration/move-groups/{group_id}/report")
+def get_move_group_report(group_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json
+    from fastapi.responses import JSONResponse
+    with get_conn() as c:
+        group = c.execute("SELECT * FROM move_groups WHERE id=?", (group_id,)).fetchone()
+        if not group:
+            return JSONResponse(status_code=404, content={"error": "Move group not found"})
+        vms = [dict(v) for v in c.execute("SELECT * FROM move_group_vms WHERE group_id=?", (group_id,)).fetchall()]
+        plans_rows = c.execute("SELECT * FROM migration_plans WHERE notes LIKE ? ORDER BY created_at DESC",
+                               (f"%{dict(group)['name']}%",)).fetchall()
+    plans = []
+    total_ok = total_fail = 0
+    for row in plans_rows:
+        d2 = dict(row)
+        try: el = _json.loads(d2.get("event_log") or "[]")
+        except: el = []
+        try: vl = _json.loads(d2.get("vm_list") or "[]")
+        except: vl = []
+        ok_c  = len([e for e in el if "[OK]"   in e.get("msg","")])
+        fl_c  = len([e for e in el if "[FAIL]" in e.get("msg","")])
+        total_ok += ok_c; total_fail += fl_c
+        plans.append({"plan_id":d2["id"],"plan_name":d2.get("plan_name"),
+                      "status":d2.get("status"),"target_platform":d2.get("target_platform"),
+                      "progress":d2.get("progress",0),"vms":len(vl),
+                      "succeeded":ok_c,"failed":fl_c,
+                      "started_at":d2.get("started_at"),"completed_at":d2.get("completed_at")})
+    g = dict(group)
+    return {"group_id":group_id,"group_name":g.get("name"),
+            "total_vms_in_group":len(vms),"total_plans":len(plans),
+            "summary":{"succeeded":total_ok,"failed":total_fail},"plans":plans,"vms":vms}
+
+@app.get("/api/migration/move-groups/{group_id}/report/download")
+def download_move_group_report(group_id: int, fmt: str = "json", u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json, io, csv
+    from fastapi.responses import StreamingResponse, JSONResponse
+    from datetime import datetime
+    with get_conn() as c:
+        group = c.execute("SELECT * FROM move_groups WHERE id=?", (group_id,)).fetchone()
+        if not group: return JSONResponse(status_code=404, content={"error":"Not found"})
+        vms = [dict(v) for v in c.execute("SELECT * FROM move_group_vms WHERE group_id=?", (group_id,)).fetchall()]
+        plans = [dict(r) for r in c.execute("SELECT * FROM migration_plans WHERE notes LIKE ? ORDER BY created_at",
+                                            (f"%{dict(group)['name']}%",)).fetchall()]
+    g = dict(group)
+    name_safe = (g.get("name","group") or "group").replace(" ","_").replace("/","_")
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Move Group Report:",g.get("name"),"Generated:",datetime.now().isoformat()])
+        writer.writerow([])
+        writer.writerow(["Plan Name","Status","Target","Progress%","Started","Completed"])
+        for pl in plans:
+            writer.writerow([pl.get("plan_name"),pl.get("status"),pl.get("target_platform"),
+                             pl.get("progress",0),pl.get("started_at"),pl.get("completed_at")])
+        writer.writerow([])
+        writer.writerow(["VM Name","vCenter","CPU","Memory MB","Disk GB","Power State"])
+        for vm in vms:
+            writer.writerow([vm.get("vm_name"),vm.get("vcenter_name"),vm.get("cpu",""),
+                             vm.get("memory_mb",""),vm.get("disk_gb",""),vm.get("power_state","")])
+        output.seek(0)
+        return StreamingResponse(output, media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{name_safe}_report.csv"'})
+    content = _json.dumps({"group":g,"plans":plans,"vms":vms}, indent=2, default=str)
+    return StreamingResponse(io.BytesIO(content.encode()), media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name_safe}_report.json"'})
+
+
+
+# ============================================================
+# MIGRATION REPORT ENDPOINTS
+# ============================================================
+
+@app.get("/api/migration/plans/{plan_id}/report")
+def get_plan_report(plan_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json
+    from fastapi.responses import JSONResponse
+    with get_conn() as c:
+        row = c.execute("SELECT * FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Plan not found"})
+    d = dict(row)
+    try: d["vm_list"] = _json.loads(d.get("vm_list") or "[]")
+    except: d["vm_list"] = []
+    try: d["event_log"] = _json.loads(d.get("event_log") or "[]")
+    except: d["event_log"] = []
+    try: d["target_detail"] = _json.loads(d.get("target_detail") or "{}")
+    except: d["target_detail"] = {}
+    total_vms = len(d["vm_list"])
+    ok_events  = [e for e in d["event_log"] if "[OK]"   in e.get("msg","")]
+    fail_events= [e for e in d["event_log"] if "[FAIL]" in e.get("msg","")]
+    warn_events= [e for e in d["event_log"] if "[WARN]" in e.get("msg","")]
+    duration_sec = None
+    if d.get("started_at") and d.get("completed_at"):
+        try:
+            from datetime import datetime
+            s  = datetime.strptime(d["started_at"][:19],  "%Y-%m-%d %H:%M:%S")
+            e2 = datetime.strptime(d["completed_at"][:19],"%Y-%m-%d %H:%M:%S")
+            duration_sec = int((e2 - s).total_seconds())
+        except: pass
+    return {
+        "plan_id": plan_id, "plan_name": d.get("plan_name"),
+        "source_platform": d.get("source_platform","VMware"),
+        "source_vcenter": d.get("source_vcenter"),
+        "target_platform": d.get("target_platform"),
+        "target_detail": d.get("target_detail"),
+        "status": d.get("status"), "progress": d.get("progress",0),
+        "created_by": d.get("created_by"), "approved_by": d.get("approved_by"),
+        "created_at": d.get("created_at"), "started_at": d.get("started_at"),
+        "completed_at": d.get("completed_at"), "duration_seconds": duration_sec,
+        "summary": {"total_vms": total_vms, "succeeded": len(ok_events),
+                    "failed": len(fail_events), "warnings": len(warn_events)},
+        "vms": d["vm_list"], "event_log": d["event_log"], "notes": d.get("notes"),
+    }
+
+@app.get("/api/migration/plans/{plan_id}/report/download")
+def download_plan_report(plan_id: int, fmt: str = "json", u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json, io, csv
+    from fastapi.responses import StreamingResponse, JSONResponse
+    with get_conn() as c:
+        row = c.execute("SELECT * FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    d = dict(row)
+    try: d["vm_list"] = _json.loads(d.get("vm_list") or "[]")
+    except: d["vm_list"] = []
+    try: d["event_log"] = _json.loads(d.get("event_log") or "[]")
+    except: d["event_log"] = []
+    plan_name_safe = (d.get("plan_name","plan") or "plan").replace(" ","_").replace("/","_")
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Plan","Status","Target","Created By","Started","Completed","Progress%"])
+        writer.writerow([d.get("plan_name"),d.get("status"),d.get("target_platform"),
+                         d.get("created_by"),d.get("started_at"),d.get("completed_at"),d.get("progress",0)])
+        writer.writerow([])
+        writer.writerow(["VM Name","CPU","Memory MB","Disk GB","Power State","IP"])
+        for vm in d["vm_list"]:
+            if isinstance(vm,dict):
+                writer.writerow([vm.get("name",""),vm.get("cpu",""),vm.get("memory_mb",""),
+                                 vm.get("disk_gb",""),vm.get("power_state",""),vm.get("ip_address","")])
+        writer.writerow([])
+        writer.writerow(["Timestamp","Message","User"])
+        for ev in d["event_log"]:
+            writer.writerow([ev.get("ts",""),ev.get("msg",""),ev.get("user","system")])
+        output.seek(0)
+        return StreamingResponse(output, media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{plan_name_safe}_report.csv"'})
+    content = _json.dumps(d, indent=2, default=str)
+    return StreamingResponse(io.BytesIO(content.encode()), media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{plan_name_safe}_report.json"'})
+
+@app.get("/api/migration/move-groups/{group_id}/report")
+def get_move_group_report(group_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json
+    from fastapi.responses import JSONResponse
+    with get_conn() as c:
+        group = c.execute("SELECT * FROM move_groups WHERE id=?", (group_id,)).fetchone()
+        if not group:
+            return JSONResponse(status_code=404, content={"error": "Move group not found"})
+        vms = [dict(v) for v in c.execute("SELECT * FROM move_group_vms WHERE group_id=?", (group_id,)).fetchall()]
+        plans_rows = c.execute("SELECT * FROM migration_plans WHERE notes LIKE ? ORDER BY created_at DESC",
+                               (f"%{dict(group)['name']}%",)).fetchall()
+    plans = []
+    total_ok = total_fail = 0
+    for row in plans_rows:
+        d2 = dict(row)
+        try: el = _json.loads(d2.get("event_log") or "[]")
+        except: el = []
+        try: vl = _json.loads(d2.get("vm_list") or "[]")
+        except: vl = []
+        ok_c  = len([e for e in el if "[OK]"   in e.get("msg","")])
+        fl_c  = len([e for e in el if "[FAIL]" in e.get("msg","")])
+        total_ok += ok_c; total_fail += fl_c
+        plans.append({"plan_id":d2["id"],"plan_name":d2.get("plan_name"),
+                      "status":d2.get("status"),"target_platform":d2.get("target_platform"),
+                      "progress":d2.get("progress",0),"vms":len(vl),
+                      "succeeded":ok_c,"failed":fl_c,
+                      "started_at":d2.get("started_at"),"completed_at":d2.get("completed_at")})
+    g = dict(group)
+    return {"group_id":group_id,"group_name":g.get("name"),
+            "total_vms_in_group":len(vms),"total_plans":len(plans),
+            "summary":{"succeeded":total_ok,"failed":total_fail},"plans":plans,"vms":vms}
+
+@app.get("/api/migration/move-groups/{group_id}/report/download")
+def download_move_group_report(group_id: int, fmt: str = "json", u=Depends(require_role("admin","operator","viewer"))):
+    from db import get_conn
+    import json as _json, io, csv
+    from fastapi.responses import StreamingResponse, JSONResponse
+    from datetime import datetime
+    with get_conn() as c:
+        group = c.execute("SELECT * FROM move_groups WHERE id=?", (group_id,)).fetchone()
+        if not group: return JSONResponse(status_code=404, content={"error":"Not found"})
+        vms = [dict(v) for v in c.execute("SELECT * FROM move_group_vms WHERE group_id=?", (group_id,)).fetchall()]
+        plans = [dict(r) for r in c.execute("SELECT * FROM migration_plans WHERE notes LIKE ? ORDER BY created_at",
+                                            (f"%{dict(group)['name']}%",)).fetchall()]
+    g = dict(group)
+    name_safe = (g.get("name","group") or "group").replace(" ","_").replace("/","_")
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Move Group Report:",g.get("name"),"Generated:",datetime.now().isoformat()])
+        writer.writerow([])
+        writer.writerow(["Plan Name","Status","Target","Progress%","Started","Completed"])
+        for pl in plans:
+            writer.writerow([pl.get("plan_name"),pl.get("status"),pl.get("target_platform"),
+                             pl.get("progress",0),pl.get("started_at"),pl.get("completed_at")])
+        writer.writerow([])
+        writer.writerow(["VM Name","vCenter","CPU","Memory MB","Disk GB","Power State"])
+        for vm in vms:
+            writer.writerow([vm.get("vm_name"),vm.get("vcenter_name"),vm.get("cpu",""),
+                             vm.get("memory_mb",""),vm.get("disk_gb",""),vm.get("power_state","")])
+        output.seek(0)
+        return StreamingResponse(output, media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{name_safe}_report.csv"'})
+    content = _json.dumps({"group":g,"plans":plans,"vms":vms}, indent=2, default=str)
+    return StreamingResponse(io.BytesIO(content.encode()), media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name_safe}_report.json"'})
+
+
 @app.get("/api/migration/move-groups")
 def list_move_groups(u=Depends(require_role("admin","operator","viewer"))):
     from db import get_conn
@@ -7439,3 +7840,1562 @@ def migration_preflight(req: dict, u=Depends(require_role("admin","operator"))):
         }
     }
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  COMPLIANCE MODULE  --  REST API Endpoints
+#  PostgreSQL-backed, 3-month rolling window
+# ═══════════════════════════════════════════════════════════════════════════
+
+_PG_COMP = dict(
+    host="127.0.0.1", port=5433, dbname="caas_dashboard",
+    user="caas_app", password="CaaS@App2024#", connect_timeout=10,
+)
+
+def _pg_comp():
+    import psycopg2, psycopg2.extras
+    return psycopg2.connect(**_PG_COMP, cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+@app.get("/api/compliance/summary")
+def compliance_summary(u=Depends(require_role("admin","operator","viewer"))):
+    """KPI cards + donut data for the compliance dashboard."""
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                # Latest scan totals
+                cur.execute("""
+                    SELECT total_assets, compliant, warning, non_compliant,
+                           scanned_at, triggered_by, status
+                    FROM compliance_scans
+                    ORDER BY scanned_at DESC LIMIT 1
+                """)
+                latest = cur.fetchone()
+
+                # Average score from latest scan results
+                cur.execute("""
+                    SELECT ROUND(AVG(r.score),1) AS avg_score,
+                           MAX(r.scanned_at)     AS last_scan
+                    FROM compliance_results r
+                    JOIN compliance_scans s ON s.id = r.scan_id
+                    WHERE s.scanned_at = (SELECT MAX(scanned_at) FROM compliance_scans WHERE status='completed')
+                """)
+                score_row = cur.fetchone()
+
+                # Trend last 30 days
+                cur.execute("""
+                    SELECT trend_date, total_assets, compliant, warning,
+                           non_compliant, avg_score
+                    FROM compliance_trend
+                    ORDER BY trend_date DESC LIMIT 30
+                """)
+                trend = [dict(r) for r in cur.fetchall()]
+
+                # Top failing checks
+                cur.execute("""
+                    SELECT check_data->'name' AS check_name,
+                           COUNT(*) AS fail_count
+                    FROM compliance_results r,
+                         jsonb_array_elements(r.checks) AS check_data
+                    WHERE check_data->>'status' = 'non_compliant'
+                      AND r.scanned_at >= NOW() - INTERVAL '7 days'
+                    GROUP BY check_data->'name'
+                    ORDER BY fail_count DESC LIMIT 8
+                """)
+                top_failures = [dict(r) for r in cur.fetchall()]
+
+        if latest:
+            total = latest["total_assets"] or 0
+            comp  = latest["compliant"]    or 0
+            warn  = latest["warning"]      or 0
+            bad   = latest["non_compliant"] or 0
+        else:
+            total = comp = warn = bad = 0
+
+        return {
+            "total_assets":   total,
+            "compliant":      comp,
+            "warning":        warn,
+            "non_compliant":  bad,
+            "compliant_pct":  round(comp / total * 100, 1) if total else 0,
+            "warning_pct":    round(warn / total * 100, 1) if total else 0,
+            "non_compliant_pct": round(bad / total * 100, 1) if total else 0,
+            "avg_score":      float(score_row["avg_score"] or 0) if score_row else 0,
+            "last_scan":      str(latest["scanned_at"]) if latest else None,
+            "trend":          list(reversed(trend)),
+            "top_failures":   top_failures,
+        }
+    except Exception as ex:
+        import traceback
+        log.error(f"compliance_summary error: {ex}\n{traceback.format_exc()}")
+        return {"total_assets":0,"compliant":0,"warning":0,"non_compliant":0,
+                "compliant_pct":0,"warning_pct":0,"non_compliant_pct":0,
+                "avg_score":0,"last_scan":None,"trend":[],"top_failures":[]}
+
+
+@app.get("/api/compliance/assets")
+def compliance_assets(
+    status:    str = None,    # compliant | warning | non_compliant
+    asset_type: str = None,   # vm | baremetal
+    os_family:  str = None,   # windows | linux | other
+    vcenter:    str = None,
+    search:     str = None,
+    page:       int = 1,
+    page_size:  int = 50,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Paginated, filterable asset compliance list."""
+    import json as _json
+    try:
+        filters = []
+        params  = []
+
+        if status:
+            filters.append("r.status = %s");     params.append(status)
+        if asset_type:
+            filters.append("a.asset_type = %s"); params.append(asset_type)
+        if os_family:
+            filters.append("a.os_family = %s");  params.append(os_family)
+        if vcenter:
+            filters.append("a.vcenter ILIKE %s"); params.append(f"%{vcenter}%")
+        if search:
+            filters.append("(a.hostname ILIKE %s OR a.ip_address ILIKE %s OR a.os_name ILIKE %s)")
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+
+        where = ("WHERE " + " AND ".join(filters)) if filters else ""
+        offset = (page - 1) * page_size
+
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                # Latest result per asset
+                base_sql = f"""
+                    WITH latest AS (
+                        SELECT DISTINCT ON (r.asset_id) r.*
+                        FROM compliance_results r
+                        JOIN compliance_scans s ON s.id = r.scan_id
+                        WHERE s.status = 'completed'
+                        ORDER BY r.asset_id, r.scanned_at DESC
+                    )
+                    SELECT
+                        a.id, a.hostname, a.ip_address, a.os_name, a.os_version,
+                        a.os_family, a.asset_type, a.vcenter, a.cluster,
+                        a.hypervisor_host, a.cpu_count, a.memory_gb, a.disk_gb,
+                        a.power_state, a.tools_status, a.hw_version,
+                        a.environment, a.owner_team, a.last_seen,
+                        a.ssh_auth_failed, a.vm_tags, a.location,
+                        r.score, r.status AS compliance_status,
+                        r.patch_age_days, r.uptime_days, r.eol_os, r.missing_patches,
+                        r.tools_ok, r.hw_version_ok, r.snapshot_ok,
+                        r.scanned_at AS last_scanned
+                    FROM compliance_assets a
+                    JOIN latest r ON r.asset_id = a.id
+                    {where}
+                """
+
+                # Total count
+                cur.execute(f"SELECT COUNT(*) AS cnt FROM ({base_sql}) AS t", params)
+                total_count = cur.fetchone()["cnt"]
+
+                # Paged results — show running VMs with uptime first, then by hostname
+                cur.execute(base_sql + """
+                    ORDER BY
+                        (CASE WHEN a.power_state = 'poweredOn' THEN 0 ELSE 1 END) ASC,
+                        r.uptime_days DESC NULLS LAST,
+                        a.hostname ASC
+                    LIMIT %s OFFSET %s""",
+                            params + [page_size, offset])
+                rows = [dict(r) for r in cur.fetchall()]
+
+        # Serialise dates
+        for r in rows:
+            for k, v in r.items():
+                if hasattr(v, "isoformat"):
+                    r[k] = v.isoformat()
+
+        return {
+            "assets":     rows,
+            "total":      total_count,
+            "page":       page,
+            "page_size":  page_size,
+            "pages":      (total_count + page_size - 1) // page_size if page_size else 1,
+        }
+    except Exception as ex:
+        log.error(f"compliance_assets error: {ex}")
+        return {"assets": [], "total": 0, "page": 1, "page_size": page_size, "pages": 0}
+
+
+@app.get("/api/compliance/assets/{asset_id}")
+def compliance_asset_detail(
+    asset_id: int,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Full detail for a single asset: asset info + check breakdown + history + remediations."""
+    import json as _json
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                # Asset info
+                cur.execute("SELECT * FROM compliance_assets WHERE id = %s", (asset_id,))
+                asset = cur.fetchone()
+                if not asset:
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(status_code=404, content={"error": "Asset not found"})
+                # Latest compliance result with checks
+                cur.execute("""
+                    SELECT r.*, s.scanned_at AS scan_time
+                    FROM compliance_results r
+                    JOIN compliance_scans s ON s.id = r.scan_id
+                    WHERE r.asset_id = %s AND s.status = 'completed'
+                    ORDER BY r.scanned_at DESC LIMIT 1
+                """, (asset_id,))
+                latest = cur.fetchone()
+
+                # 90-day score history
+                cur.execute("""
+                    SELECT DATE(r.scanned_at) AS scan_date, r.score, r.status
+                    FROM compliance_results r
+                    JOIN compliance_scans s ON s.id = r.scan_id
+                    WHERE r.asset_id = %s AND s.status = 'completed'
+                      AND r.scanned_at >= NOW() - INTERVAL '90 days'
+                    ORDER BY r.scanned_at ASC
+                """, (asset_id,))
+                history = [dict(r) for r in cur.fetchall()]
+
+                # Open remediations
+                cur.execute("""
+                    SELECT * FROM compliance_remediations
+                    WHERE asset_id = %s AND status IN ('open','in_progress')
+                    ORDER BY created_at DESC
+                """, (asset_id,))
+                remediations = [dict(r) for r in cur.fetchall()]
+
+        def _serial(d):
+            if d is None:
+                return None
+            out = {}
+            for k, v in d.items():
+                if hasattr(v, "isoformat"):
+                    out[k] = v.isoformat()
+                else:
+                    out[k] = v
+            return out
+
+        checks = latest["checks"] if latest else []
+        if isinstance(checks, str):
+            checks = _json.loads(checks)
+
+        # Extract uptime_days from checks JSON
+        uptime_days = None
+        try:
+            import re as _re
+            for c in checks:
+                if c.get("name") == "uptime":
+                    m = _re.search(r"(\d+)\s*d", c.get("message",""))
+                    if m: uptime_days = int(m.group(1))
+        except Exception:
+            pass
+
+        asset_dict = _serial(dict(asset))
+
+        return {
+            "asset":        asset_dict,
+            "score":        latest["score"]   if latest else None,
+            "status":       latest["status"]  if latest else None,
+            "last_scanned": str(latest["scanned_at"]) if latest else None,
+            "patch_age_days": latest["patch_age_days"] if latest else None,
+            "missing_patches": latest["missing_patches"] if latest else None,
+            "uptime_days":  uptime_days,
+            "vm_tags":      asset_dict.get("vm_tags") or [],
+            "location":     asset_dict.get("location") or "Bangalore",
+            "checks":       checks,
+            "history":      [_serial(r) for r in history],
+            "remediations": [_serial(r) for r in remediations],
+        }
+    except Exception as ex:
+        log.error(f"compliance_asset_detail error: {ex}")
+        return {"error": str(ex)}
+
+
+@app.get("/api/compliance/trend")
+def compliance_trend(
+    days: int = 90,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Daily trend data for charts — up to 90 days."""
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT trend_date, total_assets, compliant, warning,
+                           non_compliant, avg_score
+                    FROM compliance_trend
+                    WHERE trend_date >= CURRENT_DATE - %s
+                    ORDER BY trend_date ASC
+                """, (days,))
+                rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            if hasattr(r.get("trend_date"), "isoformat"):
+                r["trend_date"] = r["trend_date"].isoformat()
+        return {"trend": rows, "days": days}
+    except Exception as ex:
+        log.error(f"compliance_trend error: {ex}")
+        return {"trend": [], "days": days}
+
+
+@app.post("/api/compliance/scan")
+async def trigger_compliance_scan(request: Request, u=Depends(require_role("admin","operator"))):
+    """Trigger a manual compliance scan in background. Accepts optional JSON body:
+    { "enabled_checks": ["eol_os","uptime",...], "use_ssh": true }
+    """
+    import threading
+    username = u.get("username","?")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    enabled_checks = body.get("enabled_checks", None)   # None = all default rules
+    use_ssh        = body.get("use_ssh", True)
+
+    def _scan():
+        try:
+            from compliance_collector import run_compliance_scan
+            run_compliance_scan(triggered_by=username,
+                                enabled_checks=enabled_checks,
+                                use_ssh=use_ssh)
+        except Exception as ex:
+            log.error(f"CompliSphere scan error: {ex}")
+    threading.Thread(target=_scan, daemon=True).start()
+    checks_desc = f"{len(enabled_checks)} rules" if enabled_checks else "all rules"
+    return {"ok": True, "message": f"CompliSphere scan triggered ({checks_desc}, SSH={'on' if use_ssh else 'off'}) — results available in ~2 minutes"}
+
+
+@app.get("/api/compliance/rules")
+def get_compliance_rules(u=Depends(require_role("admin","operator","viewer"))):
+    """Return the full list of compliance rules with metadata for the UI toggle."""
+    from compliance_rules import ALL_RULES
+    return {"rules": ALL_RULES}
+
+
+@app.get("/api/compliance/report")
+def compliance_report(
+    # Status filters
+    status:        str  = None,   # compliant|warning|non_compliant  (comma-sep allowed)
+    # Asset filters
+    asset_type:    str  = None,   # vm|baremetal
+    os_family:     str  = None,   # windows|linux|other
+    os_name:       str  = None,   # partial match
+    vcenter:       str  = None,   # partial match
+    environment:   str  = None,
+    owner_team:    str  = None,
+    # Score range
+    score_min:     int  = None,
+    score_max:     int  = None,
+    # Patch age
+    patch_age_min: int  = None,
+    patch_age_max: int  = None,
+    # Uptime range
+    uptime_min:    int  = None,
+    uptime_max:    int  = None,
+    # Disk threshold  (score < N)
+    score_below:   int  = None,
+    # Check-level filter
+    failing_check: str  = None,   # eol_os|os_patch_age|uptime|vmware_tools|…
+    # Free search
+    search:        str  = None,
+    # Sorting
+    sort_by:       str  = "score",   # score|hostname|patch_age_days|uptime_days
+    sort_dir:      str  = "asc",
+    # Report format (json always; set fmt=csv to get CSV text)
+    fmt:           str  = "json",
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Flexible multi-filter compliance report — returns JSON or CSV."""
+    import json as _json, csv as _csv, io as _io
+    try:
+        filters, params = [], []
+
+        # Status filter (comma-separated: "warning,non_compliant")
+        if status:
+            vals = [s.strip() for s in status.split(",") if s.strip()]
+            if vals:
+                placeholders = ",".join(["%s"] * len(vals))
+                filters.append(f"r.status IN ({placeholders})")
+                params.extend(vals)
+
+        if asset_type:
+            filters.append("a.asset_type = %s"); params.append(asset_type)
+        if os_family:
+            filters.append("a.os_family = %s"); params.append(os_family)
+        if os_name:
+            filters.append("a.os_name ILIKE %s"); params.append(f"%{os_name}%")
+        if vcenter:
+            filters.append("a.vcenter ILIKE %s"); params.append(f"%{vcenter}%")
+        if environment:
+            filters.append("a.environment ILIKE %s"); params.append(f"%{environment}%")
+        if owner_team:
+            filters.append("a.owner_team ILIKE %s"); params.append(f"%{owner_team}%")
+        if search:
+            filters.append("(a.hostname ILIKE %s OR a.ip_address ILIKE %s OR a.os_name ILIKE %s)")
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+
+        if score_min is not None:
+            filters.append("r.score >= %s"); params.append(score_min)
+        if score_max is not None:
+            filters.append("r.score <= %s"); params.append(score_max)
+        if score_below is not None:
+            filters.append("r.score < %s"); params.append(score_below)
+        if patch_age_min is not None:
+            filters.append("r.patch_age_days >= %s"); params.append(patch_age_min)
+        if patch_age_max is not None:
+            filters.append("r.patch_age_days <= %s"); params.append(patch_age_max)
+
+        # Uptime: stored in checks JSON or via separate column if available
+        where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+        # Validate sort
+        SORT_MAP = {"score": "r.score", "hostname": "a.hostname",
+                    "patch_age_days": "r.patch_age_days", "uptime_days": "r.scanned_at",
+                    "vcenter": "a.vcenter", "os_name": "a.os_name"}
+        order_col = SORT_MAP.get(sort_by, "r.score")
+        order_dir = "DESC" if sort_dir.lower() == "desc" else "ASC"
+
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                base_sql = f"""
+                    WITH latest AS (
+                        SELECT DISTINCT ON (r.asset_id) r.*
+                        FROM compliance_results r
+                        JOIN compliance_scans s ON s.id = r.scan_id
+                        WHERE s.status = 'completed'
+                        ORDER BY r.asset_id, r.scanned_at DESC
+                    )
+                    SELECT
+                        a.id, a.hostname, a.ip_address,
+                        a.os_name, a.os_version, a.os_family,
+                        a.asset_type, a.vcenter, a.cluster,
+                        a.hypervisor_host, a.cpu_count, a.memory_gb, a.disk_gb,
+                        a.power_state, a.tools_status, a.hw_version,
+                        a.environment, a.owner_team, a.last_seen,
+                        a.ssh_auth_failed,
+                        r.score, r.status AS compliance_status,
+                        r.patch_age_days, r.eol_os, r.missing_patches,
+                        r.tools_ok, r.hw_version_ok, r.snapshot_ok,
+                        r.checks, r.scanned_at AS last_scanned
+                    FROM compliance_assets a
+                    JOIN latest r ON r.asset_id = a.id
+                    {where}
+                """
+                cur.execute(base_sql + f" ORDER BY {order_col} {order_dir}", params)
+                rows = [dict(r) for r in cur.fetchall()]
+
+        # Post-filter on uptime (extracted from checks JSON)
+        def _get_uptime(row):
+            try:
+                checks = row.get("checks") or []
+                if isinstance(checks, str):
+                    checks = _json.loads(checks)
+                for c in checks:
+                    if c.get("name") == "uptime":
+                        msg = c.get("message", "")
+                        import re as _re
+                        m = _re.search(r"(\d+)[\s]?d", msg)
+                        if m: return int(m.group(1))
+            except Exception:
+                pass
+            return None
+
+        if uptime_min is not None or uptime_max is not None or failing_check:
+            filtered = []
+            for row in rows:
+                # Uptime filter
+                if uptime_min is not None or uptime_max is not None:
+                    uptime = _get_uptime(row)
+                    if uptime is None:
+                        pass  # include if unknown
+                    else:
+                        if uptime_min is not None and uptime < uptime_min:
+                            continue
+                        if uptime_max is not None and uptime > uptime_max:
+                            continue
+                # Failing check filter
+                if failing_check:
+                    try:
+                        checks = row.get("checks") or []
+                        if isinstance(checks, str):
+                            checks = _json.loads(checks)
+                        has_fail = any(c.get("name") == failing_check and c.get("status") != "compliant" for c in checks)
+                        if not has_fail:
+                            continue
+                    except Exception:
+                        pass
+                filtered.append(row)
+            rows = filtered
+
+        # Serialise
+        for row in rows:
+            for k, v in row.items():
+                if hasattr(v, "isoformat"):
+                    row[k] = v.isoformat()
+            # Remove binary checks from default output (too large), expose summary
+            try:
+                checks = row.get("checks") or []
+                if isinstance(checks, str):
+                    checks = _json.loads(checks)
+                failing = [c["name"] for c in checks if c.get("status") != "compliant"]
+                row["failing_checks"] = failing
+                row["failing_count"]  = len(failing)
+            except Exception:
+                row["failing_checks"] = []
+                row["failing_count"]  = 0
+            del row["checks"]
+
+        # Summary stats
+        total = len(rows)
+        summary = {
+            "total":         total,
+            "compliant":     sum(1 for r in rows if r["compliance_status"] == "compliant"),
+            "warning":       sum(1 for r in rows if r["compliance_status"] == "warning"),
+            "non_compliant": sum(1 for r in rows if r["compliance_status"] == "non_compliant"),
+            "avg_score":     round(sum(r["score"] or 0 for r in rows) / total, 1) if total else 0,
+        }
+
+        if fmt.lower() == "csv":
+            from fastapi.responses import StreamingResponse
+            if not rows:
+                return StreamingResponse(_io.StringIO("No data"), media_type="text/csv",
+                                         headers={"Content-Disposition": "attachment; filename=compliance_report.csv"})
+            buf = _io.StringIO()
+            cols = ["hostname","ip_address","os_name","os_version","os_family","asset_type",
+                    "vcenter","cluster","cpu_count","memory_gb","disk_gb","power_state",
+                    "tools_status","hw_version","environment","owner_team","score",
+                    "compliance_status","patch_age_days","eol_os","missing_patches",
+                    "tools_ok","hw_version_ok","snapshot_ok","failing_checks","failing_count",
+                    "last_scanned","ssh_auth_failed"]
+            writer = _csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                row["failing_checks"] = "|".join(row.get("failing_checks") or [])
+                writer.writerow(row)
+            buf.seek(0)
+            return StreamingResponse(buf, media_type="text/csv",
+                                     headers={"Content-Disposition": "attachment; filename=compliance_report.csv"})
+
+        return {"summary": summary, "assets": rows, "total": total}
+
+    except Exception as ex:
+        log.error(f"compliance_report error: {ex}")
+        import traceback; log.error(traceback.format_exc()[:800])
+        return {"summary": {}, "assets": [], "total": 0, "error": str(ex)}
+
+
+@app.post("/api/compliance/remediate/{asset_id}")
+async def create_remediation(
+    asset_id: int,
+    request: Request,
+    u=Depends(require_role("admin","operator"))
+):
+    """Create a remediation task for an asset."""
+    import json as _json
+    try:
+        req = await request.json()
+    except Exception:
+        req = {}
+    username = u.get("username","?")
+    check_name = req.get("check_name","")
+    action     = req.get("action","Manual remediation required")
+    priority   = req.get("priority","medium")
+    notes      = req.get("notes","")
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO compliance_remediations
+                        (asset_id, check_name, action, priority, status, created_by, notes)
+                    VALUES (%s, %s, %s, %s, 'open', %s, %s)
+                    RETURNING id
+                """, (asset_id, check_name, action, priority, username, notes))
+                rid = cur.fetchone()["id"]
+            conn.commit()
+        return {"ok": True, "remediation_id": rid}
+    except Exception as ex:
+        log.error(f"create_remediation error: {ex}")
+        return {"ok": False, "error": str(ex)}
+
+
+# ── Credential Vault ─────────────────────────────────────────────────────────
+import base64 as _b64, os as _os
+
+def _cred_obfuscate(plain: str) -> str:
+    """Simple reversible obfuscation (XOR + b64). NOT encryption – keep DB access controlled."""
+    key = b"CaaS@Cred2026#"
+    byt = plain.encode()
+    out = bytes(b ^ key[i % len(key)] for i, b in enumerate(byt))
+    return _b64.b64encode(out).decode()
+
+def _cred_deobfuscate(enc: str) -> str:
+    key = b"CaaS@Cred2026#"
+    byt = _b64.b64decode(enc.encode())
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(byt)).decode()
+
+def _ensure_cred_table():
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS compliance_credentials (
+                        id          SERIAL PRIMARY KEY,
+                        profile_name TEXT NOT NULL UNIQUE,
+                        os_family   TEXT NOT NULL DEFAULT 'linux',
+                        port        INTEGER NOT NULL DEFAULT 22,
+                        username    TEXT NOT NULL,
+                        password_enc TEXT NOT NULL,
+                        created_by  TEXT,
+                        created_at  TIMESTAMPTZ DEFAULT NOW(),
+                        updated_at  TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+            conn.commit()
+    except Exception as ex:
+        log.error(f"_ensure_cred_table: {ex}")
+
+_ensure_cred_table()
+
+@app.get("/api/compliance/credentials")
+def list_credentials(u=Depends(require_role("admin","operator","viewer"))):
+    """List credential profiles — passwords never returned."""
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id, profile_name, os_family, port, username, created_by, created_at, updated_at FROM compliance_credentials ORDER BY id")
+                rows = cur.fetchall()
+        return {"credentials": [dict(r) for r in rows]}
+    except Exception as ex:
+        return {"credentials": [], "error": str(ex)}
+
+@app.post("/api/compliance/credentials")
+async def create_credential(request: Request, u=Depends(require_role("admin","operator"))):
+    """Save a new credential profile (password stored obfuscated)."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    profile_name = (body.get("profile_name") or "").strip()
+    os_family    = body.get("os_family", "linux")
+    port         = int(body.get("port", 22 if os_family == "linux" else 5985))
+    username     = (body.get("username") or "").strip()
+    password     = body.get("password", "")
+    if not profile_name or not username or not password:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "profile_name, username and password are required"})
+    enc = _cred_obfuscate(password)
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO compliance_credentials (profile_name, os_family, port, username, password_enc, created_by)
+                    VALUES (%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (profile_name) DO UPDATE
+                      SET os_family=EXCLUDED.os_family, port=EXCLUDED.port,
+                          username=EXCLUDED.username, password_enc=EXCLUDED.password_enc,
+                          updated_at=NOW()
+                    RETURNING id
+                """, (profile_name, os_family, port, username, enc, u.get("username","?")))
+                new_id = cur.fetchone()["id"]
+            conn.commit()
+        return {"ok": True, "id": new_id}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+@app.delete("/api/compliance/credentials/{cred_id}")
+def delete_credential(cred_id: int, u=Depends(require_role("admin","operator"))):
+    """Delete a credential profile."""
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM compliance_credentials WHERE id=%s", (cred_id,))
+            conn.commit()
+        return {"ok": True}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+@app.post("/api/compliance/assets/{asset_id}/credentials")
+async def assign_asset_credential(asset_id: int, request: Request, u=Depends(require_role("admin","operator"))):
+    """Assign a credential profile override to a specific asset."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    cred_id = body.get("credential_id")
+    if not cred_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "credential_id required"})
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                # Store in asset extra_data JSON field or a dedicated column
+                cur.execute("""
+                    UPDATE compliance_assets
+                    SET extra_data = COALESCE(extra_data, '{}'::jsonb) || jsonb_build_object('override_cred_id', %s::text)
+                    WHERE id = %s
+                """, (str(cred_id), asset_id))
+            conn.commit()
+        return {"ok": True}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+@app.patch("/api/compliance/assets/{asset_id}/location")
+async def update_asset_location(
+    asset_id: int,
+    request: Request,
+    u=Depends(require_role("admin"))
+):
+    """Admin-only: update location for a compliance asset."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    location = (body.get("location") or "").strip()
+    if not location:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "location is required"})
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE compliance_assets SET location=%s WHERE id=%s",
+                    (location, asset_id)
+                )
+            conn.commit()
+        return {"ok": True}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+@app.patch("/api/compliance/remediate/{remediation_id}/status")
+async def update_remediation_status(
+    remediation_id: int,
+    request: Request,
+    u=Depends(require_role("admin","operator"))
+):
+    """Update remediation status: open | in_progress | resolved | dismissed."""
+    import json as _json
+    try:
+        req = await request.json()
+    except Exception:
+        req = {}
+    """Update remediation status: open | in_progress | resolved | dismissed."""
+    username   = u.get("username","?")
+    new_status = req.get("status","")
+    notes      = req.get("notes","")
+    if new_status not in ("open","in_progress","resolved","dismissed"):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error":"Invalid status"})
+    try:
+        with _pg_comp() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE compliance_remediations
+                    SET status=%s, updated_at=NOW(), notes=COALESCE(NULLIF(%s,''),notes),
+                        resolved_at=CASE WHEN %s='resolved' THEN NOW() ELSE resolved_at END,
+                        resolved_by=CASE WHEN %s='resolved' THEN %s ELSE resolved_by END
+                    WHERE id=%s
+                """, (new_status, notes, new_status, new_status, username, remediation_id))
+            conn.commit()
+        return {"ok": True}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#   CIS HARDENING  API  — /api/cis/*
+# ══════════════════════════════════════════════════════════════════════════════
+
+from cis_scanner import (
+    scan_assets_cis, get_job_status, ingest_goss_json, remediate_check,
+    init_cis_db,
+)
+from cis_reports import (
+    generate_csv_vm, generate_csv_fleet,
+    generate_html_vm, generate_html_fleet,
+    generate_pdf_vm, generate_pdf_fleet,
+)
+
+def _pg_cis():
+    import psycopg2, psycopg2.extras
+    return psycopg2.connect(
+        host="127.0.0.1", port=5433, dbname="caas_dashboard",
+        user="caas_app", password="CaaS@App2024#", connect_timeout=10,
+        cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/cis/dashboard")
+async def cis_dashboard(u=Depends(require_role("admin","operator","viewer"))):
+    """Fleet-wide CIS summary: per-benchmark donut data, top failing checks."""
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""
+                WITH latest AS (
+                    SELECT DISTINCT ON (vm_name) *
+                    FROM cis_vm_scans
+                    WHERE score IS NOT NULL
+                      AND (passed + failed) > 0
+                    ORDER BY vm_name, scanned_at DESC
+                )
+                SELECT
+                    COUNT(*)            AS total_vms,
+                    ROUND(AVG(score),1) AS avg_score,
+                    SUM(passed)         AS total_passed,
+                    SUM(failed)         AS total_failed,
+                    SUM(skipped)        AS total_skipped,
+                    SUM(excluded)       AS total_excluded,
+                    SUM(total_checks)   AS grand_total,
+                    COUNT(*) FILTER (WHERE score >= 80) AS compliant_vms,
+                    COUNT(*) FILTER (WHERE score >= 50 AND score < 80) AS warning_vms,
+                    COUNT(*) FILTER (WHERE score < 50) AS critical_vms
+                FROM latest
+            """)
+            fleet = dict(cur.fetchone() or {})
+
+            cur.execute("""
+                WITH latest AS (
+                    SELECT DISTINCT ON (vm_name) benchmark, score, passed, failed,
+                           total_checks, os_family
+                    FROM cis_vm_scans
+                    WHERE score IS NOT NULL
+                      AND (passed + failed) > 0
+                    ORDER BY vm_name, scanned_at DESC
+                )
+                SELECT
+                    benchmark, os_family,
+                    COUNT(*) AS vm_count,
+                    ROUND(AVG(score),1) AS avg_score,
+                    SUM(passed)::int AS passed,
+                    SUM(failed)::int AS failed,
+                    SUM(total_checks)::int AS total,
+                    COUNT(*) FILTER (WHERE score >= 80) AS compliant,
+                    COUNT(*) FILTER (WHERE score >= 50 AND score < 80) AS warning,
+                    COUNT(*) FILTER (WHERE score < 50)  AS critical,
+                    CASE
+                      WHEN benchmark ILIKE '%RHEL10%' OR benchmark ILIKE '%RHEL_10%' THEN 'RHEL 10'
+                      WHEN benchmark ILIKE '%RHEL9%'  OR benchmark ILIKE '%RHEL_9%'  THEN 'RHEL 9'
+                      WHEN benchmark ILIKE '%RHEL8%'  OR benchmark ILIKE '%RHEL_8%'  THEN 'RHEL 8'
+                      WHEN benchmark ILIKE '%2022%' THEN 'Windows Server 2022'
+                      WHEN benchmark ILIKE '%2019%' THEN 'Windows Server 2019'
+                      WHEN benchmark ILIKE '%2016%' THEN 'Windows Server 2016'
+                      WHEN os_family = 'linux'   THEN 'Linux (Generic)'
+                      WHEN os_family = 'windows' THEN 'Windows (Generic)'
+                      ELSE 'Other'
+                    END AS os_label
+                FROM latest
+                GROUP BY benchmark, os_family
+                ORDER BY vm_count DESC
+            """)
+            by_benchmark = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT cr.cis_id, cr.title, cr.section, cr.category,
+                       COUNT(*) AS fail_count,
+                       COUNT(DISTINCT vs.vm_name) AS affected_vms
+                FROM cis_check_results cr
+                JOIN cis_vm_scans vs ON vs.id = cr.vm_scan_id
+                WHERE cr.status = 'fail'
+                  AND vs.scanned_at = (
+                      SELECT MAX(scanned_at) FROM cis_vm_scans vs2
+                      WHERE vs2.vm_name = vs.vm_name)
+                GROUP BY cr.cis_id, cr.title, cr.section, cr.category
+                ORDER BY fail_count DESC LIMIT 15
+            """)
+            top_failures = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                WITH latest AS (
+                    SELECT DISTINCT ON (vm_name) score
+                    FROM cis_vm_scans WHERE score IS NOT NULL
+                    ORDER BY vm_name, scanned_at DESC
+                )
+                SELECT (FLOOR(score/10)*10)::int AS bucket, COUNT(*) AS count
+                FROM latest GROUP BY bucket ORDER BY bucket
+            """)
+            histogram = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT id, status, triggered_by, started_at, completed_at,
+                       target_vms, scanned_vms, total_checks, passed_checks, failed_checks
+                FROM cis_scan_jobs ORDER BY id DESC LIMIT 10
+            """)
+            recent_jobs = [dict(r) for r in cur.fetchall()]
+
+        conn.close()
+        return {"fleet": fleet, "by_benchmark": by_benchmark,
+                "top_failures": top_failures, "histogram": histogram,
+                "recent_jobs": recent_jobs}
+    except Exception as ex:
+        import traceback; traceback.print_exc()
+        return {"fleet": {}, "by_benchmark": [], "top_failures": [],
+                "histogram": [], "recent_jobs": [], "error": str(ex)}
+
+
+@app.get("/api/cis/vms")
+async def cis_vms(
+    benchmark: str = "", os_family: str = "",
+    min_score: float = 0, max_score: float = 100,
+    search: str = "", page: int = 1, page_size: int = 50,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    try:
+        conn = _pg_cis()
+        conds = ["score IS NOT NULL"]; params: list = []
+        if benchmark:
+            conds.append("benchmark ILIKE %s"); params.append(f"%{benchmark}%")
+        if os_family:
+            conds.append("os_family = %s"); params.append(os_family)
+        if search:
+            conds.append("vm_name ILIKE %s"); params.append(f"%{search}%")
+        where = "WHERE " + " AND ".join(conds)
+
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                WITH latest AS (
+                    SELECT DISTINCT ON (vm_name) *
+                    FROM cis_vm_scans {where}
+                    ORDER BY vm_name, scanned_at DESC
+                )
+                SELECT COUNT(*) AS cnt FROM latest WHERE score BETWEEN %s AND %s
+            """, params + [min_score, max_score])
+            total = cur.fetchone()["cnt"]
+
+            cur.execute(f"""
+                WITH latest AS (
+                    SELECT DISTINCT ON (vm_name) *
+                    FROM cis_vm_scans {where}
+                    ORDER BY vm_name, scanned_at DESC
+                )
+                SELECT * FROM latest WHERE score BETWEEN %s AND %s
+                ORDER BY score ASC LIMIT %s OFFSET %s
+            """, params + [min_score, max_score, page_size, (page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "page_size": page_size,
+                "pages": max(1,(total+page_size-1)//page_size), "vms": rows}
+    except Exception as ex:
+        return {"total": 0, "vms": [], "error": str(ex)}
+
+
+@app.get("/api/cis/vms/{vm_scan_id}/results")
+async def cis_vm_results(
+    vm_scan_id: int, status_filter: str = "", section: str = "",
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    try:
+        conn = _pg_cis()
+        conds = ["cr.vm_scan_id = %s"]; params = [vm_scan_id]
+        if status_filter: conds.append("cr.status = %s"); params.append(status_filter)
+        if section: conds.append("cr.section = %s"); params.append(section)
+        where = "WHERE " + " AND ".join(conds)
+        with conn.cursor() as cur:
+            cur.execute(f"""
+                SELECT cr.*, vs.vm_name, vs.ip_address, vs.os_name, vs.benchmark, vs.score
+                FROM cis_check_results cr
+                JOIN cis_vm_scans vs ON vs.id = cr.vm_scan_id
+                {where} ORDER BY cr.section, cr.cis_id
+            """, params)
+            checks = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT * FROM cis_vm_scans WHERE id=%s", (vm_scan_id,))
+            vm_info = dict(cur.fetchone() or {})
+        conn.close()
+        by_section: dict = {}
+        for c in checks:
+            by_section.setdefault(c.get("section","?"), []).append(c)
+        return {"vm": vm_info, "checks": checks, "by_section": by_section, "total": len(checks)}
+    except Exception as ex:
+        return {"vm": {}, "checks": [], "by_section": {}, "error": str(ex)}
+
+
+@app.get("/api/cis/vms/by-name/{vm_name}/results")
+async def cis_vm_results_by_name(
+    vm_name: str, status_filter: str = "", section: str = "",
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""SELECT id FROM cis_vm_scans WHERE vm_name=%s
+                          ORDER BY scanned_at DESC LIMIT 1""", (vm_name,))
+            row = cur.fetchone()
+        conn.close()
+        if not row:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=404, content={"error": "No scan found"})
+        return await cis_vm_results(row["id"], status_filter, section, u=u)
+    except Exception as ex:
+        return {"error": str(ex)}
+
+
+@app.post("/api/cis/scan")
+async def cis_scan(request: Request, u=Depends(require_role("admin","operator"))):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    # Support filtering by os_family or benchmark for targeted scans
+    os_family = body.get("os_family") or None
+    benchmark = body.get("benchmark") or None
+    asset_ids = body.get("asset_ids") or None
+
+    # If os_family/benchmark filter given, resolve asset_ids from compliance_assets
+    if not asset_ids and (os_family or benchmark):
+        try:
+            conn = _pg_cis()
+            with conn.cursor() as cur:
+                conds = ["is_active=TRUE","ip_address IS NOT NULL"]
+                params = []
+                if os_family:
+                    conds.append("os_family=%s"); params.append(os_family)
+                if benchmark and benchmark != "CIS_RHEL_Generic":
+                    # Map benchmark label to os_name pattern
+                    bm_map = {
+                        "CIS_RHEL8": "Red Hat Enterprise Linux 8",
+                        "CIS_RHEL9": "Red Hat Enterprise Linux 9",
+                        "CIS_RHEL7": "Red Hat Enterprise Linux 7",
+                        "CIS_RHEL10": "Red Hat Enterprise Linux 10",
+                        "CIS_WinServer2022": "2022",
+                        "CIS_WinServer2019": "2019",
+                        "CIS_WinServer2016": "2016",
+                    }
+                    pat = next((v for k,v in bm_map.items() if k in benchmark), None)
+                    if pat:
+                        conds.append("os_name ILIKE %s"); params.append(f"%{pat}%")
+                cur.execute(f"SELECT id FROM compliance_assets WHERE {' AND '.join(conds)}", params)
+                asset_ids = [r["id"] for r in cur.fetchall()]
+            conn.close()
+        except Exception as ex:
+            return {"job_id": None, "message": str(ex), "total": 0}
+
+    result = scan_assets_cis(
+        asset_ids=asset_ids or None,
+        triggered_by=u.get("username","system"))
+    return result
+
+
+@app.get("/api/cis/jobs/{job_id}")
+async def cis_job_status(job_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    return get_job_status(job_id)
+
+
+@app.get("/api/cis/jobs")
+async def cis_jobs_list(u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM cis_scan_jobs ORDER BY id DESC LIMIT 50")
+            jobs = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"jobs": jobs}
+    except Exception as ex:
+        return {"jobs": [], "error": str(ex)}
+
+
+@app.post("/api/cis/ingest")
+async def cis_ingest(request: Request, u=Depends(require_role("admin","operator"))):
+    import tempfile, json as _json, os as _os
+    try:
+        body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    goss_data = body.get("goss_json")
+    if not goss_data:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "goss_json required"})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+        _json.dump(goss_data, tf); tmp = tf.name
+    result = ingest_goss_json(tmp, vm_name=body.get("vm_name","unknown"),
+                              ip=body.get("ip",""), asset_id=body.get("asset_id"),
+                              triggered_by=u.get("username","system"))
+    _os.unlink(tmp)
+    return result
+
+
+@app.post("/api/cis/ingest-local")
+async def cis_ingest_local(request: Request, u=Depends(require_role("admin","operator"))):
+    import os as _os
+    try:
+        body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    file_path = body.get("file_path","")
+    if not _os.path.isfile(file_path):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"error": f"File not found: {file_path}"})
+    return ingest_goss_json(file_path, vm_name=body.get("vm_name","unknown"),
+                            ip=body.get("ip",""), asset_id=body.get("asset_id"),
+                            triggered_by=u.get("username","system"))
+
+
+@app.get("/api/cis/exclusions")
+async def cis_exclusions_list(vm_name: str = "", u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            if vm_name:
+                cur.execute("""SELECT * FROM cis_exclusions
+                    WHERE vm_name=%s OR vm_name IS NULL OR vm_name=''
+                    ORDER BY cis_id""", (vm_name,))
+            else:
+                cur.execute("SELECT * FROM cis_exclusions ORDER BY cis_id")
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"exclusions": rows}
+    except Exception as ex:
+        return {"exclusions": [], "error": str(ex)}
+
+
+@app.post("/api/cis/exclusions")
+async def cis_add_exclusion(request: Request, u=Depends(require_role("admin","operator"))):
+    try:
+        body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    cis_id = body.get("cis_id","")
+    if not cis_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "cis_id required"})
+    vm_name = body.get("vm_name") or None
+    reason  = body.get("reason","")
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO cis_exclusions (cis_id, vm_name, os_family, reason, excluded_by)
+                VALUES (%s,%s,%s,%s,%s)
+                ON CONFLICT (cis_id, COALESCE(vm_name,'__global__'))
+                DO UPDATE SET reason=%s, excluded_by=%s, excluded_at=NOW()
+                RETURNING id
+            """, (cis_id, vm_name, body.get("os_family"), reason, u.get("username","system"),
+                  reason, u.get("username","system")))
+            new_id = cur.fetchone()["id"]
+        conn.commit(); conn.close()
+        return {"ok": True, "id": new_id}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+@app.delete("/api/cis/exclusions/{exclusion_id}")
+async def cis_remove_exclusion(exclusion_id: int, u=Depends(require_role("admin","operator"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM cis_exclusions WHERE id=%s", (exclusion_id,))
+        conn.commit(); conn.close()
+        return {"ok": True}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+@app.post("/api/cis/exclusions/bulk")
+async def cis_bulk_exclusion(request: Request, u=Depends(require_role("admin","operator"))):
+    """Add exclusions for a list of CIS IDs, optionally scoped to an OS benchmark."""
+    try:
+        body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    cis_ids   = body.get("cis_ids") or []
+    vm_name   = body.get("vm_name") or None
+    os_family = body.get("os_family") or None
+    reason    = body.get("reason","Bulk exclusion")
+    if not cis_ids:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "cis_ids required"})
+    try:
+        conn = _pg_cis()
+        added = 0
+        with conn.cursor() as cur:
+            for cis_id in cis_ids:
+                cur.execute("""
+                    INSERT INTO cis_exclusions (cis_id, vm_name, os_family, reason, excluded_by)
+                    VALUES (%s,%s,%s,%s,%s)
+                    ON CONFLICT (cis_id, COALESCE(vm_name,'__global__')) DO UPDATE
+                    SET reason=%s, excluded_by=%s, excluded_at=NOW()
+                """, (cis_id, vm_name, os_family, reason,
+                       u.get("username","system"), reason, u.get("username","system")))
+                added += 1
+        conn.commit(); conn.close()
+        return {"ok": True, "added": added}
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)}
+
+
+@app.get("/api/cis/assets")
+async def cis_assets_list(
+    os_family: str = "", benchmark: str = "", search: str = "",
+    page: int = 1, page_size: int = 100,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """List scannable compliance_assets with OS/benchmark filters for VM List."""
+    try:
+        conn = _pg_cis()
+        conds = ["is_active=TRUE","ip_address IS NOT NULL",
+                 "(os_family='linux' OR os_family='windows')"]
+        params = []
+        if os_family:
+            conds.append("os_family=%s"); params.append(os_family)
+        if search:
+            conds.append("hostname ILIKE %s"); params.append(f"%{search}%")
+        where = " AND ".join(conds)
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM compliance_assets WHERE {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(f"""
+                SELECT id, hostname, ip_address, os_family, os_name, os_version, power_state
+                FROM compliance_assets WHERE {where}
+                ORDER BY hostname LIMIT %s OFFSET %s
+            """, params + [page_size, (page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "pages": max(1,(total+page_size-1)//page_size),
+                "page": page, "assets": rows}
+    except Exception as ex:
+        return {"total": 0, "pages": 1, "page": 1, "assets": [], "error": str(ex)}
+
+
+@app.post("/api/cis/remediate")
+async def cis_remediate(request: Request, u=Depends(require_role("admin","operator"))):
+    try:
+        body = await request.json()
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    vm_scan_id = body.get("vm_scan_id")
+    cis_id     = body.get("cis_id","")
+    if not vm_scan_id or not cis_id:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"error": "vm_scan_id and cis_id required"})
+    return remediate_check(vm_scan_id, cis_id, performed_by=u.get("username","system"))
+
+
+@app.get("/api/cis/remediation-log")
+async def cis_remediation_log(
+    vm_name: str = "", page: int = 1, page_size: int = 50,
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    try:
+        conn = _pg_cis()
+        where = "WHERE vm_name ILIKE %s" if vm_name else ""
+        params = [f"%{vm_name}%"] if vm_name else []
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS cnt FROM cis_remediation_log {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(f"""SELECT * FROM cis_remediation_log {where}
+                ORDER BY performed_at DESC LIMIT %s OFFSET %s""",
+                params + [page_size, (page-1)*page_size])
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return {"total": total, "page": page, "page_size": page_size,
+                "pages": max(1,(total+page_size-1)//page_size), "log": rows}
+    except Exception as ex:
+        return {"total": 0, "log": [], "error": str(ex)}
+
+
+@app.get("/api/cis/report/vm/{vm_scan_id}")
+async def cis_report_vm(
+    vm_scan_id: int,
+    format: str = "html",
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Download a single-VM CIS report. format=csv|html|pdf"""
+    from fastapi.responses import Response
+    try:
+        if format == "csv":
+            data, fname = generate_csv_vm(vm_scan_id)
+            return Response(content=data,
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+        elif format == "pdf":
+            data, fname = generate_pdf_vm(vm_scan_id)
+            mt = "application/pdf" if fname.endswith(".pdf") else "text/html"
+            return Response(content=data, media_type=mt,
+                headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+        else:  # html
+            data, fname = generate_html_vm(vm_scan_id)
+            return Response(content=data.encode(),
+                media_type="text/html; charset=utf-8",
+                headers={"Content-Disposition": f'inline; filename="{fname}"'})
+    except Exception as ex:
+        import traceback; traceback.print_exc()
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": str(ex)})
+
+
+@app.get("/api/cis/report/fleet")
+async def cis_report_fleet(
+    format: str = "html",
+    benchmark: str = "",
+    os_family: str = "",
+    u=Depends(require_role("admin","operator","viewer"))
+):
+    """Download fleet-wide CIS report. format=csv|html|pdf"""
+    from fastapi.responses import Response
+    try:
+        if format == "csv":
+            data, fname = generate_csv_fleet(benchmark, os_family)
+            return Response(content=data,
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+        elif format == "pdf":
+            data, fname = generate_pdf_fleet(benchmark, os_family)
+            mt = "application/pdf" if fname.endswith(".pdf") else "text/html"
+            return Response(content=data, media_type=mt,
+                headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+        else:  # html
+            data, fname = generate_html_fleet(benchmark, os_family)
+            return Response(content=data.encode(),
+                media_type="text/html; charset=utf-8",
+                headers={"Content-Disposition": f'inline; filename="{fname}"'})
+    except Exception as ex:
+        import traceback; traceback.print_exc()
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": str(ex)})
+
+
+@app.get("/api/cis/benchmarks")
+async def cis_benchmarks(u=Depends(require_role("admin","operator","viewer"))):    return {"benchmarks": [
+        {"id": "CIS_RHEL8",         "label": "CIS RHEL 8 v4.0.0",            "checks": 44, "os_family": "linux"},
+        {"id": "CIS_RHEL9",         "label": "CIS RHEL 9 v2.0.0",            "checks": 44, "os_family": "linux"},
+        {"id": "CIS_RHEL10",        "label": "CIS RHEL 10 v1.0.1",           "checks": 44, "os_family": "linux"},
+        {"id": "CIS_WinServer2016", "label": "CIS Windows Server 2016 v2.0.0","checks": 13, "os_family": "windows"},
+        {"id": "CIS_WinServer2019", "label": "CIS Windows Server 2019 v3.0.1","checks": 13, "os_family": "windows"},
+        {"id": "CIS_WinServer2022", "label": "CIS Windows Server 2022 v3.0.0","checks": 13, "os_family": "windows"},
+    ]}
+
+
+# === ZERTO DISASTER RECOVERY ROUTES ===
+from zerto_client import (
+    init_zerto_db, list_sites as z_list_sites, get_site as z_get_site,
+    create_site as z_create_site, delete_site as z_delete_site,
+    test_site_connection, get_dashboard as z_get_dashboard,
+    list_vpgs as z_list_vpgs, get_vpg_detail as z_get_vpg_detail,
+    list_vms as z_list_vms, list_alerts as z_list_alerts,
+    dismiss_alert as z_dismiss_alert, list_tasks as z_list_tasks,
+    list_events as z_list_events, get_reports as z_get_reports,
+    failover_test, failover_test_stop, live_failover,
+    commit_failover, rollback_failover, move_vpg, failback_vpg,
+    get_audit_log as z_get_audit_log, list_checkpoints as z_list_checkpoints,
+)
+init_zerto_db()
+
+@app.get("/api/zerto/sites")
+def api_zerto_list_sites(u=Depends(get_current_user)):
+    return z_list_sites()
+
+@app.get("/api/zerto/sites/{site_id}")
+def api_zerto_get_site(site_id: int, u=Depends(get_current_user)):
+    return z_get_site(site_id)
+
+@app.post("/api/zerto/sites")
+def api_zerto_create_site(body: dict, u=Depends(get_current_user)):
+    return z_create_site(body)
+
+@app.delete("/api/zerto/sites/{site_id}")
+def api_zerto_delete_site(site_id: int, u=Depends(get_current_user)):
+    return z_delete_site(site_id)
+
+@app.post("/api/zerto/sites/{site_id}/test")
+def api_zerto_test_site(site_id: int, u=Depends(get_current_user)):
+    return test_site_connection(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/dashboard")
+def api_zerto_dashboard(site_id: int, u=Depends(get_current_user)):
+    return z_get_dashboard(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/vpgs")
+def api_zerto_vpgs(site_id: int, u=Depends(get_current_user)):
+    return z_list_vpgs(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/vms")
+def api_zerto_vms(site_id: int, u=Depends(get_current_user)):
+    return z_list_vms(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/alerts")
+def api_zerto_alerts(site_id: int, u=Depends(get_current_user)):
+    return z_list_alerts(site_id)
+
+@app.post("/api/zerto/sites/{site_id}/alerts/{alert_id}/dismiss")
+def api_zerto_dismiss(site_id: int, alert_id: str, u=Depends(get_current_user)):
+    return z_dismiss_alert(site_id, alert_id)
+
+@app.get("/api/zerto/sites/{site_id}/tasks")
+def api_zerto_tasks(site_id: int, u=Depends(get_current_user)):
+    return z_list_tasks(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/tasks/{task_id}")
+def api_zerto_task_detail(site_id: int, task_id: str, u=Depends(get_current_user)):
+    from zerto_client import _zapi, get_site
+    try:
+        t = _zapi(site_id, "tasks/%s" % task_id)
+        if not t or not isinstance(t, dict):
+            return {"error": "Task not found"}
+        st = t.get("Status") or {}
+        vpgs = (t.get("RelatedEntities") or {}).get("Vpgs", [])
+        return {
+            "task_id": t.get("TaskIdentifier",""),
+            "type": t.get("Type",""),
+            "state": st.get("State", 0),
+            "progress": st.get("Progress", 0),
+            "started": t.get("Started",""),
+            "completed": t.get("Completed",""),
+            "complete_reason": t.get("CompleteReason",""),
+            "initiated_by": t.get("InitiatedBy",""),
+            "is_cancellable": t.get("IsCancellable", False),
+            "vpg_ids": [v.get("identifier","") for v in vpgs],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/zerto/sites/{site_id}/tasks/{task_id}")
+def api_zerto_task_detail(site_id: int, task_id: str, u=Depends(get_current_user)):
+    from zerto_client import _zapi, get_site
+    try:
+        t = _zapi(site_id, "tasks/%s" % task_id)
+        if not t or not isinstance(t, dict):
+            return {"error": "Task not found"}
+        st = t.get("Status") or {}
+        vpgs = (t.get("RelatedEntities") or {}).get("Vpgs", [])
+        return {
+            "task_id": t.get("TaskIdentifier",""),
+            "type": t.get("Type",""),
+            "state": st.get("State", 0),
+            "progress": st.get("Progress", 0),
+            "started": t.get("Started",""),
+            "completed": t.get("Completed",""),
+            "complete_reason": t.get("CompleteReason",""),
+            "initiated_by": t.get("InitiatedBy",""),
+            "is_cancellable": t.get("IsCancellable", False),
+            "vpg_ids": [v.get("identifier","") for v in vpgs],
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/zerto/sites/{site_id}/events")
+def api_zerto_events(site_id: int, u=Depends(get_current_user)):
+    return z_list_events(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/reports")
+def api_zerto_reports(site_id: int, u=Depends(get_current_user)):
+    return z_get_reports(site_id)
+
+@app.post("/api/zerto/sites/{site_id}/vpgs")
+def api_zerto_create_vpg(site_id: int, body: dict, u=Depends(get_current_user)):
+    if u.get("role") not in ("admin",):
+        from fastapi import HTTPException, status as _status
+        raise HTTPException(_status.HTTP_403_FORBIDDEN, detail="Admin only")
+    from zerto_client import create_vpg
+    return create_vpg(site_id, body)
+
+@app.delete("/api/zerto/sites/{site_id}/vpgs/{vpg_id}")
+def api_zerto_delete_vpg(site_id: int, vpg_id: str, u=Depends(get_current_user)):
+    if u.get("role") not in ("admin",):
+        from fastapi import HTTPException, status as _status
+        raise HTTPException(_status.HTTP_403_FORBIDDEN, detail="Admin only")
+    from zerto_client import delete_vpg
+    return delete_vpg(site_id, vpg_id)
+
+@app.get("/api/zerto/sites/{site_id}/peersites")
+def api_zerto_peersites(site_id: int, u=Depends(get_current_user)):
+    from zerto_client import get_peer_sites
+    return get_peer_sites(site_id)
+
+@app.post("/api/zerto/sites/{site_id}/vpgs")
+def api_zerto_create_vpg(site_id: int, body: dict, u=Depends(get_current_user)):
+    if u.get("role") not in ("admin",):
+        from fastapi import HTTPException, status as _status
+        raise HTTPException(_status.HTTP_403_FORBIDDEN, detail="Admin only")
+    from zerto_client import create_vpg
+    return create_vpg(site_id, body)
+
+@app.delete("/api/zerto/sites/{site_id}/vpgs/{vpg_id}")
+def api_zerto_delete_vpg(site_id: int, vpg_id: str, u=Depends(get_current_user)):
+    if u.get("role") not in ("admin",):
+        from fastapi import HTTPException, status as _status
+        raise HTTPException(_status.HTTP_403_FORBIDDEN, detail="Admin only")
+    from zerto_client import delete_vpg
+    return delete_vpg(site_id, vpg_id)
+
+@app.get("/api/zerto/sites/{site_id}/peersites")
+def api_zerto_peersites(site_id: int, u=Depends(get_current_user)):
+    from zerto_client import get_peer_sites
+    return get_peer_sites(site_id)
+
+
+@app.get("/api/zerto/sites/{site_id}/localsite")
+async def zerto_localsite(site_id: int, current_user=Depends(get_current_user)):
+    from zerto_client import get_local_site
+    return get_local_site(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/virtualizationsites")
+async def zerto_virtsites(site_id: int, current_user=Depends(get_current_user)):
+    from zerto_client import get_virt_sites
+    return get_virt_sites(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/virtualizationsites/{virt_site_id}/vms")
+async def zerto_virt_vms(site_id: int, virt_site_id: str, current_user=Depends(get_current_user)):
+    from zerto_client import get_virt_site_vms
+    return get_virt_site_vms(site_id, virt_site_id)
+
+
+@app.get("/api/zerto/sites/{site_id}/localsite")
+async def zerto_localsite(site_id: int, current_user=Depends(get_current_user)):
+    from zerto_client import get_local_site
+    return get_local_site(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/virtualizationsites")
+async def zerto_virtsites(site_id: int, current_user=Depends(get_current_user)):
+    from zerto_client import get_virt_sites
+    return get_virt_sites(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/virtualizationsites/{virt_site_id}/vms")
+async def zerto_virt_vms(site_id: int, virt_site_id: str, current_user=Depends(get_current_user)):
+    from zerto_client import get_virt_site_vms
+    return get_virt_site_vms(site_id, virt_site_id)
+
+@app.get("/api/zerto/sites/{site_id}/audit")
+def api_zerto_audit(site_id: int, u=Depends(get_current_user)):
+    return z_get_audit_log(site_id)
+
+@app.get("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/checkpoints")
+def api_zerto_checkpoints(site_id: int, vpg_id: str, u=Depends(get_current_user)):
+    return z_list_checkpoints(site_id, vpg_id)
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/test-failover")
+def api_zerto_tf(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return failover_test(site_id, vpg_id, body.get("vpg_name",""), body.get("checkpoint_id"))
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/stop-test")
+def api_zerto_st(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return failover_test_stop(site_id, vpg_id, body.get("vpg_name",""), body.get("success",True), body.get("notes",""))
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/live-failover")
+def api_zerto_lf(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return live_failover(site_id, vpg_id, body.get("vpg_name",""), body)
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/commit-failover")
+def api_zerto_cf(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return commit_failover(site_id, vpg_id, body.get("vpg_name",""), body.get("reverse_protection",False))
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/rollback-failover")
+def api_zerto_rf(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return rollback_failover(site_id, vpg_id, body.get("vpg_name",""))
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/move")
+def api_zerto_mv(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return move_vpg(site_id, vpg_id, body.get("vpg_name",""), body)
+
+@app.post("/api/zerto/sites/{site_id}/vpgs/{vpg_id}/failback")
+def api_zerto_fb(site_id: int, vpg_id: str, body: dict = {}, u=Depends(get_current_user)):
+    return failback_vpg(site_id, vpg_id, body.get("vpg_name",""), body)
