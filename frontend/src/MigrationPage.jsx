@@ -161,6 +161,11 @@ export default function MigrationPage({ currentUser, p }) {
   const [nutClusters, setNutClusters] = useState([]);
   const [hvHosts, setHvHosts] = useState([]);
   const [hpevmeHosts, setHpevmeHosts] = useState([]);
+  const [vmeClusters, setVmeClusters] = useState([]);
+  const [vmeClusterHosts, setVmeClusterHosts] = useState([]);
+  const [selVmeCluster, setSelVmeCluster] = useState("");
+  const [loadingVmeClusters, setLoadingVmeClusters] = useState(false);
+  const [loadingVmeHosts, setLoadingVmeHosts] = useState(false);
   const [targetDetail, setTargetDetail] = useState({});
   const [loadingTarget, setLoadingTarget] = useState(false);
 
@@ -427,7 +432,18 @@ export default function MigrationPage({ currentUser, p }) {
         setHvHosts((Array.isArray(r) ? r : r.hosts || []).filter(h => h.success === true));
       } else if (platform === "hpevme") {
         const r = await fetchHPEVMEStatus();
-        setHpevmeHosts((Array.isArray(r) ? r : r.hosts || []));
+        const hosts = (Array.isArray(r) ? r : r.hosts || []);
+        setHpevmeHosts(hosts);
+        setVmeClusters([]); setVmeClusterHosts([]); setSelVmeCluster("");
+        const hid = hosts[0]?.id || "";
+        if (hosts[0]) setTargetDetail({ host_id: hid, host_name: hosts[0].name || hosts[0].host, host: hosts[0].host });
+        setLoadingVmeClusters(true);
+        try {
+          const cr = await fetch(`/api/hpevme/clusters?host_id=${hid}`, { headers: { Authorization: "Bearer " + getToken() } });
+          const cd = await cr.json();
+          setVmeClusters(cd.clusters || []);
+        } catch { setVmeClusters([]); }
+        setLoadingVmeClusters(false);
       }
     } catch { showToast("Failed to load target data", "error"); }
     setLoadingTarget(false);
@@ -481,8 +497,19 @@ export default function MigrationPage({ currentUser, p }) {
           setTargetNetworks([{ name: "Default Switch" }, { name: "External Switch" }, { name: "Private Switch" }]);
           setTargetStorage([{ name: "C:\\Hyper-V\\Virtual Hard Disks" }, { name: "D:\\VMs" }]);
         } else if (targetPlatform === "hpevme") {
-          setTargetNetworks([{ name: "Default Network" }, { name: "VME Management" }, { name: "VM Network" }]);
-          setTargetStorage([{ name: "/var/lib/libvirt/images" }, { name: "/vme-storage/vms" }]);
+          const hid = targetDetail.host_id || "";
+          Promise.all([
+            fetch("/api/hpevme/networks?host_id=" + hid, { headers: { Authorization: "Bearer " + getToken() } }).then(r => r.json()),
+            fetch("/api/hpevme/storage?host_id=" + hid, { headers: { Authorization: "Bearer " + getToken() } }).then(r => r.json()),
+          ]).then(([nr, sr]) => {
+            const nets = (nr.networks || []).filter(n => !n.error);
+            const vols = (sr.storage || []).filter(s => !s.error);
+            setTargetNetworks(nets.length ? nets : [{ name: "Default Network" }, { name: "VME Management" }]);
+            setTargetStorage(vols.length ? vols.map(v => ({ name: v.name + (v.sizeGB ? " (" + v.sizeGB + "GB)" : "") })) : [{ name: "/var/lib/libvirt/images" }]);
+          }).catch(() => {
+            setTargetNetworks([{ name: "Default Network" }, { name: "VME Management" }]);
+            setTargetStorage([{ name: "/var/lib/libvirt/images" }]);
+          });
         }
       }).catch(() => {});
     }
@@ -889,22 +916,75 @@ export default function MigrationPage({ currentUser, p }) {
                   {hvHosts.length === 0 && <div style={{ fontSize: 12, color: p.yellow, marginTop: 8 }}>⚠️ No connected Hyper-V hosts found</div>}
                 </>)}
                 {targetPlatform === "hpevme" && (<>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: p.textSub, marginBottom: 6, display: "block" }}>HPE VM Essentials Host</label>
-                  <select value={targetDetail.host_id || ""} onChange={e => {
-                    const h = hpevmeHosts.find(h => h.id === e.target.value) || hpevmeHosts[0];
-                    setTargetDetail({ host_id: e.target.value, host_name: h?.name || h?.host, host: h?.host });
-                  }} style={selectStyle}>
-                    <option value="">-- Select HPE VME Host --</option>
-                    {hpevmeHosts.map(h => <option key={h.id} value={h.id}>{h.name || h.host} ({h.host})</option>)}
-                  </select>
-                  {hpevmeHosts.length === 0 && (
-                    <div style={{ fontSize: 12, color: "#0096d6", marginTop: 8 }}>
-                      ℹ️ Using default HPE VME host: 172.17.65.80
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: p.textSub, marginBottom: 6, display: "block" }}>
+                      VME Cluster {loadingVmeClusters && <span style={{ color: p.textMute, fontWeight: 400 }}>(loading...)</span>}
+                    </label>
+                    {!loadingVmeClusters && vmeClusters.length === 0 && <div style={{ fontSize: 12, color: "#f59e0b" }}>No clusters found</div>}
+                    {vmeClusters.length > 0 && (
+                      <select value={selVmeCluster} onChange={e => {
+                        const cid = e.target.value;
+                        setSelVmeCluster(cid);
+                        setVmeClusterHosts([]);
+                        setTargetDetail(prev => ({ ...prev, cluster_id: cid, cluster_name: vmeClusters.find(c => String(c.id) === cid)?.name || "", vme_host_id: null }));
+                        if (cid) {
+                          setLoadingVmeHosts(true);
+                          const hid = targetDetail.host_id || (hpevmeHosts[0]?.id || "");
+                          fetch(`/api/hpevme/clusters/${cid}/hosts?host_id=${hid}`, { headers: { Authorization: "Bearer " + getToken() } })
+                            .then(r => r.json()).then(d => { setVmeClusterHosts(d.hosts || []); setLoadingVmeHosts(false); })
+                            .catch(() => setLoadingVmeHosts(false));
+                        }
+                      }} style={selectStyle}>
+                        <option value="">-- Select Cluster --</option>
+                        {vmeClusters.map(cl => (
+                          <option key={cl.id} value={String(cl.id)}>
+                            {cl.name} ({cl.type}) - CPU: {cl.usedCpu}% | Mem: {Math.round(cl.usedMemoryMB/1024)}GB/{Math.round(cl.maxMemoryMB/1024)}GB | Storage: {cl.usedStorageGB}GB/{cl.maxStorageGB}GB
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                  {loadingVmeHosts && <LoadDots p={p} />}
+                  {!loadingVmeHosts && vmeClusterHosts.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: p.textSub, marginBottom: 10, display: "block" }}>Select Target Host ({vmeClusterHosts.length} nodes)</label>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 12 }}>
+                        {vmeClusterHosts.map(h => {
+                          const sel = targetDetail.vme_host_id === h.id;
+                          const cpuC = h.cpuPct > 80 ? "#ef4444" : h.cpuPct > 60 ? "#f59e0b" : "#10b981";
+                          const memC = h.memPct > 80 ? "#ef4444" : h.memPct > 60 ? "#f59e0b" : "#10b981";
+                          const stoC = h.storPct > 80 ? "#ef4444" : h.storPct > 60 ? "#f59e0b" : "#10b981";
+                          return (
+                            <div key={h.id} onClick={() => setTargetDetail(prev => ({ ...prev, vme_host_id: h.id, vme_host_name: h.name, vme_host_ip: h.ip }))}
+                              style={{ border: "2px solid " + (sel ? "#0096d6" : p.border), borderRadius: 12, padding: 14, cursor: "pointer", background: sel ? "#0096d620" : p.bg, transition: "all .2s" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 13, color: p.text }}>{h.name}</div>
+                                  <div style={{ fontSize: 11, color: p.textMute }}>{h.ip || h.hostname}</div>
+                                </div>
+                                <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 20, background: h.status === "provisioned" ? "#10b98120" : "#f59e0b20", color: h.status === "provisioned" ? "#10b981" : "#f59e0b", fontWeight: 700 }}>{h.status}</span>
+                              </div>
+                              {[["CPU", h.cpuPct, cpuC, h.cpuPct + "%"], ["Memory", h.memPct, memC, h.memPct + "% (" + h.usedMemoryMB + "/" + h.maxMemoryMB + " MB)"], ["Storage", h.storPct, stoC, h.storPct + "% (" + h.usedStorageGB + "/" + h.maxStorageGB + " GB)"]].map(function(row) {
+                                var lbl=row[0],pct=row[1],col=row[2],txt=row[3];
+                                return (
+                                  <div key={lbl} style={{ marginBottom: 6 }}>
+                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, marginBottom: 2, color: p.textMute }}>
+                                      <span>{lbl}</span><span style={{ color: col, fontWeight: 700 }}>{txt}</span>
+                                    </div>
+                                    <div style={{ height: 5, borderRadius: 3, background: p.panelAlt }}>
+                                      <div style={{ height: "100%", width: Math.min(pct,100)+"%", background: col, borderRadius: 3, transition: "width .5s" }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              {sel && <div style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#0096d6", marginTop: 6 }}>✓ Selected</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: p.textMute, marginTop: 8 }}>
-                    Target: KVM-based HPE VM Essentials. VMs will be converted VMDK → qcow2.
-                  </div>
+                  <div style={{ fontSize: 11, color: p.textMute, marginTop: 4 }}>KVM-based HPE VM Essentials - VMs converted VMDK to qcow2</div>
                 </>)}
               </div>
             )}
