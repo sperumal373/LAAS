@@ -7028,22 +7028,23 @@ def execute_migration(plan_id: int, u=Depends(require_role("admin","operator")))
             from db import get_conn as _gc
             from hpevme_migrate import orchestrate_hpevme_migration
             import json as _json
+            _plan = dict(plan)
             # Inject actual credentials from host config into target_detail
             try:
-                td = _json.loads(plan_data.get("target_detail", "{}") or "{}")
+                td = _json.loads(_plan.get("target_detail", "{}") or "{}")
                 hpevme_hosts = _get_hpevme_hosts()
                 hid = str(td.get("host_id", "1"))
                 hcfg = next((h for h in hpevme_hosts if str(h["id"]) == hid), hpevme_hosts[0] if hpevme_hosts else {})
                 td["host"]     = hcfg.get("host", td.get("host", "172.17.65.80"))
                 td["username"] = hcfg.get("username", "user1")
                 td["password"] = hcfg.get("password", "Wipro@123")
-                plan_data["target_detail"] = _json.dumps(td)
+                _plan["target_detail"] = _json.dumps(td)
             except Exception: pass
             with _gc() as c:
                 c.execute("UPDATE migration_plans SET status='executing', progress=0, started_at=datetime('now'), updated_at=datetime('now') WHERE id=?", (plan_id,))
                 row = c.execute("SELECT plan_name, source_vcenter, target_detail, vm_list, options FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
             pd2 = dict(row) if row else {}
-            pd2["target_detail"] = plan_data.get("target_detail", pd2.get("target_detail"))
+            pd2["target_detail"] = _plan.get("target_detail", pd2.get("target_detail"))
             def _db_upd(pid, status, progress):
                 with _gc() as c:
                     if status == "completed":
