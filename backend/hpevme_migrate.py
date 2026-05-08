@@ -73,6 +73,266 @@ def test_hpevme_connection(host_cfg: dict) -> dict:
     return {"success": True, "message": f"Connected to HPE VME at {host}", "host": host}
 
 
+def _morpheus_token(host, user, password):
+    """Obtain Morpheus OAuth2 bearer token."""
+    import requests, urllib3
+    urllib3.disable_warnings()
+    data = {
+        "username": user,
+        "password": password,
+        "grant_type": "password",
+        "client_id": "morph-customer",
+        "scope": "write",
+    }
+    r = requests.post(
+        f"https://{host}/oauth/token",
+        data=data,
+        verify=False,
+        timeout=15,
+    )
+    if r.status_code == 200:
+        return r.json().get("access_token")
+    raise RuntimeError(f"Auth failed: HTTP {r.status_code}")
+
+def _morpheus_get(host, token, path, params=None):
+    import requests, urllib3
+    urllib3.disable_warnings()
+    r = requests.get(
+        f"https://{host}/api{path}",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params=params,
+        verify=False,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+def fetch_vme_clusters(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/clusters")
+        clusters = []
+        for cl in data.get("clusters", []):
+            ws = cl.get("workerStats") or {}
+            clusters.append({
+                "id":           cl["id"],
+                "name":         cl.get("name", ""),
+                "type":         cl.get("type", {}).get("name", "HVM"),
+                "status":       cl.get("status", "unknown"),
+                "workerCount":  cl.get("workerCount") or 0,
+                "usedCpu":      round(ws.get("cpuUsage", 0), 1),
+                "usedMemoryMB": int(ws.get("usedMemory", 0) / 1024 / 1024),
+                "maxMemoryMB":  int(ws.get("maxMemory",  0) / 1024 / 1024),
+                "usedStorageGB": int(ws.get("usedStorage", 0) / 1024 / 1024 / 1024),
+                "maxStorageGB":  int(ws.get("maxStorage",  0) / 1024 / 1024 / 1024),
+            })
+        return clusters
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_cluster_hosts(host_cfg, cluster_id=None):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/servers", params={"max": 200})
+        servers = data.get("servers", [])
+        mvm = [s for s in servers if s.get("computeServerType", {}).get("code") == "mvmHost"]
+        if cluster_id is not None:
+            mvm = [s for s in mvm if str(s.get("serverGroup", {}).get("id", "")) == str(cluster_id)]
+        hosts = []
+        for sv in mvm:
+            try:
+                detail = _morpheus_get(host, token, f"/servers/{sv['id']}")
+                stats  = detail.get("stats", {})
+                server = detail.get("server", sv)
+            except Exception:
+                stats  = {}
+                server = sv
+            max_mem   = stats.get("maxMemory", 0)   or 0
+            used_mem  = stats.get("usedMemory", 0)  or 0
+            max_stor  = stats.get("maxStorage", 0)  or 0
+            used_stor = stats.get("usedStorage", 0) or 0
+            cpu_pct   = stats.get("cpuUsage", 0)    or 0
+            mem_pct  = round(used_mem  / max_mem  * 100, 1) if max_mem  else 0
+            stor_pct = round(used_stor / max_stor * 100, 1) if max_stor else 0
+            hosts.append({
+                "id":           sv["id"],
+                "name":         sv.get("name", ""),
+                "hostname":     sv.get("hostname", ""),
+                "ip":           server.get("externalIp") or server.get("internalIp") or "",
+                "status":       sv.get("status", ""),
+                "clusterId":    sv.get("serverGroup", {}).get("id"),
+                "clusterName":  sv.get("serverGroup", {}).get("name", ""),
+                "cpuPct":       round(cpu_pct, 1),
+                "usedMemoryMB": int(used_mem  / 1024 / 1024),
+                "maxMemoryMB":  int(max_mem   / 1024 / 1024),
+                "memPct":       mem_pct,
+                "usedStorageGB": int(used_stor / 1024 / 1024 / 1024),
+                "maxStorageGB":  int(max_stor  / 1024 / 1024 / 1024),
+                "storPct":      stor_pct,
+            })
+        return hosts
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_networks(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/networks", params={"max": 200})
+        return [{"id": n["id"], "name": n.get("name",""), "type": n.get("type",{}).get("name",""), "zone": n.get("zone",{}).get("name",""), "code": n.get("code","")} for n in data.get("networks", [])]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_storage(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/storage-volumes", params={"max": 200})
+        return [{"id": v["id"], "name": v.get("name",""), "type": v.get("type",{}).get("name","") if isinstance(v.get("type"),dict) else str(v.get("type","")), "sizeGB": int(v.get("maxStorage",0)/1024/1024/1024) if v.get("maxStorage") else v.get("storageSize",0), "status": v.get("status","")} for v in data.get("storageVolumes", [])]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+def _morpheus_token(host, user, password):
+    """Obtain Morpheus OAuth2 bearer token."""
+    import requests, urllib3
+    urllib3.disable_warnings()
+    data = {
+        "username": user,
+        "password": password,
+        "grant_type": "password",
+        "client_id": "morph-customer",
+        "scope": "write",
+    }
+    r = requests.post(
+        f"https://{host}/oauth/token",
+        data=data,
+        verify=False,
+        timeout=15,
+    )
+    if r.status_code == 200:
+        return r.json().get("access_token")
+    raise RuntimeError(f"Auth failed: HTTP {r.status_code}")
+
+def _morpheus_get(host, token, path, params=None):
+    import requests, urllib3
+    urllib3.disable_warnings()
+    r = requests.get(
+        f"https://{host}/api{path}",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        params=params,
+        verify=False,
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+def fetch_vme_clusters(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/clusters")
+        clusters = []
+        for cl in data.get("clusters", []):
+            ws = cl.get("workerStats") or {}
+            clusters.append({
+                "id":           cl["id"],
+                "name":         cl.get("name", ""),
+                "type":         cl.get("type", {}).get("name", "HVM"),
+                "status":       cl.get("status", "unknown"),
+                "workerCount":  cl.get("workerCount") or 0,
+                "usedCpu":      round(ws.get("cpuUsage", 0), 1),
+                "usedMemoryMB": int(ws.get("usedMemory", 0) / 1024 / 1024),
+                "maxMemoryMB":  int(ws.get("maxMemory",  0) / 1024 / 1024),
+                "usedStorageGB": int(ws.get("usedStorage", 0) / 1024 / 1024 / 1024),
+                "maxStorageGB":  int(ws.get("maxStorage",  0) / 1024 / 1024 / 1024),
+            })
+        return clusters
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_cluster_hosts(host_cfg, cluster_id=None):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/servers", params={"max": 200})
+        servers = data.get("servers", [])
+        mvm = [s for s in servers if s.get("computeServerType", {}).get("code") == "mvmHost"]
+        if cluster_id is not None:
+            mvm = [s for s in mvm if str(s.get("serverGroup", {}).get("id", "")) == str(cluster_id)]
+        hosts = []
+        for sv in mvm:
+            try:
+                detail = _morpheus_get(host, token, f"/servers/{sv['id']}")
+                stats  = detail.get("stats", {})
+                server = detail.get("server", sv)
+            except Exception:
+                stats  = {}
+                server = sv
+            max_mem   = stats.get("maxMemory", 0)   or 0
+            used_mem  = stats.get("usedMemory", 0)  or 0
+            max_stor  = stats.get("maxStorage", 0)  or 0
+            used_stor = stats.get("usedStorage", 0) or 0
+            cpu_pct   = stats.get("cpuUsage", 0)    or 0
+            mem_pct  = round(used_mem  / max_mem  * 100, 1) if max_mem  else 0
+            stor_pct = round(used_stor / max_stor * 100, 1) if max_stor else 0
+            hosts.append({
+                "id":           sv["id"],
+                "name":         sv.get("name", ""),
+                "hostname":     sv.get("hostname", ""),
+                "ip":           server.get("externalIp") or server.get("internalIp") or "",
+                "status":       sv.get("status", ""),
+                "clusterId":    sv.get("serverGroup", {}).get("id"),
+                "clusterName":  sv.get("serverGroup", {}).get("name", ""),
+                "cpuPct":       round(cpu_pct, 1),
+                "usedMemoryMB": int(used_mem  / 1024 / 1024),
+                "maxMemoryMB":  int(max_mem   / 1024 / 1024),
+                "memPct":       mem_pct,
+                "usedStorageGB": int(used_stor / 1024 / 1024 / 1024),
+                "maxStorageGB":  int(max_stor  / 1024 / 1024 / 1024),
+                "storPct":      stor_pct,
+            })
+        return hosts
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_networks(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/networks", params={"max": 200})
+        return [{"id": n["id"], "name": n.get("name",""), "type": n.get("type",{}).get("name",""), "zone": n.get("zone",{}).get("name",""), "code": n.get("code","")} for n in data.get("networks", [])]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+def fetch_vme_storage(host_cfg):
+    host = host_cfg.get("host", DEFAULT_HPEVME_HOST)
+    user = host_cfg.get("username", DEFAULT_HPEVME_USER)
+    pw   = host_cfg.get("password", DEFAULT_HPEVME_PASS)
+    try:
+        token = _morpheus_token(host, user, pw)
+        data  = _morpheus_get(host, token, "/storage-volumes", params={"max": 200})
+        return [{"id": v["id"], "name": v.get("name",""), "type": v.get("type",{}).get("name","") if isinstance(v.get("type"),dict) else str(v.get("type","")), "sizeGB": int(v.get("maxStorage",0)/1024/1024/1024) if v.get("maxStorage") else v.get("storageSize",0), "status": v.get("status","")} for v in data.get("storageVolumes", [])]
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
 def list_hpevme_vms(host_cfg: dict) -> list:
     """List VMs from HPE VME inventory."""
     host = host_cfg.get("host", DEFAULT_HPEVME_HOST)

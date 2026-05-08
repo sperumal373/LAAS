@@ -4617,6 +4617,43 @@ def hpevme_vms_ep(host_id: str = None, u=Depends(get_current_user)):
     vms = list_hpevme_vms(target)
     return {"vms": vms}
 
+@app.get("/api/hpevme/clusters")
+def hpevme_clusters_ep(host_id: str = None, u=Depends(get_current_user)):
+    """Fetch clusters from HPE VME with resource stats."""
+    from hpevme_migrate import fetch_vme_clusters
+    hosts = _get_hpevme_hosts()
+    target = next((h for h in hosts if h["id"] == host_id), hosts[0] if hosts else {})
+    clusters = fetch_vme_clusters(target)
+    return {"clusters": clusters}
+
+@app.get("/api/hpevme/clusters/{cluster_id}/hosts")
+def hpevme_cluster_hosts_ep(cluster_id: str, host_id: str = None, u=Depends(get_current_user)):
+    """Fetch hosts in a specific VME cluster with resource stats."""
+    from hpevme_migrate import fetch_vme_cluster_hosts
+    hosts = _get_hpevme_hosts()
+    target = next((h for h in hosts if h["id"] == host_id), hosts[0] if hosts else {})
+    cluster_hosts = fetch_vme_cluster_hosts(target, cluster_id)
+    return {"hosts": cluster_hosts}
+
+@app.get("/api/hpevme/networks")
+def hpevme_networks_ep(host_id: str = None, u=Depends(get_current_user)):
+    """Fetch virtual networks from HPE VME."""
+    from hpevme_migrate import fetch_vme_networks
+    hosts = _get_hpevme_hosts()
+    target = next((h for h in hosts if h["id"] == host_id), hosts[0] if hosts else {})
+    networks = fetch_vme_networks(target)
+    return {"networks": networks}
+
+@app.get("/api/hpevme/storage")
+def hpevme_storage_ep(host_id: str = None, u=Depends(get_current_user)):
+    """Fetch storage volumes from HPE VME."""
+    from hpevme_migrate import fetch_vme_storage
+    hosts = _get_hpevme_hosts()
+    target = next((h for h in hosts if h["id"] == host_id), hosts[0] if hosts else {})
+    storage = fetch_vme_storage(target)
+    return {"storage": storage}
+
+
 class HVHostsBody(BaseModel):
     hosts: list
 
