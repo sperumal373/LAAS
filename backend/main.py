@@ -8613,7 +8613,7 @@ async def update_remediation_status(
 
 from cis_scanner import (
     scan_assets_cis, get_job_status, ingest_goss_json, remediate_check,
-    init_cis_db,
+    init_cis_db, cancel_scan,
 )
 from cis_reports import (
     generate_csv_vm, generate_csv_fleet,
@@ -9311,6 +9311,16 @@ async def cis_scan_history(page: int=1, page_size: int=20, os_filter: str="",
                 "pages": max(1,(total+page_size-1)//page_size), "jobs": rows}
     except Exception as ex:
         return {"total": 0, "jobs": [], "error": str(ex)}
+
+
+@app.post("/api/cis/scan/{job_id}/cancel")
+async def cis_cancel_scan(job_id: int, u=Depends(require_role("admin","operator"))):
+    return cancel_scan(job_id)
+
+
+@app.post("/api/cis/scan/{job_id}/cancel")
+async def cis_cancel_scan(job_id: int, u=Depends(require_role("admin","operator"))):
+    return cancel_scan(job_id)
 
 
 @app.get("/api/cis/baselines/{os_key}")

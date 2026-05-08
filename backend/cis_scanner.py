@@ -1095,7 +1095,8 @@ def ingest_goss_json(file_path: str, vm_name: str, ip: str = "",
 
 # ─── Main Scan Orchestrator ───────────────────────────────────────────────────
 
-_active_jobs: dict = {}   # job_id -> {"status", "progress", "total"}
+_active_jobs: dict = {}      # job_id -> {"status", "progress", "total"}
+_cancelled_jobs: set = set()  # job_ids requested to cancel
 
 
 def scan_assets_cis(asset_ids: list | None = None, triggered_by: str = "manual", os_filter: str | None = None) -> dict:
@@ -1151,6 +1152,26 @@ def scan_assets_cis(asset_ids: list | None = None, triggered_by: str = "manual",
     except Exception as ex:
         log.error(f"scan_assets_cis: {ex}")
         return {"job_id": None, "message": str(ex), "total": 0}
+
+
+def cancel_scan(job_id: int) -> dict:
+    """Request cancellation of a running scan job."""
+    if job_id in _active_jobs and _active_jobs[job_id].get("status") == "running":
+        _cancelled_jobs.add(job_id)
+        _active_jobs[job_id]["status"] = "cancelling"
+        return {"success": True, "message": f"Cancellation requested for job {job_id}"}
+    try:
+        conn = get_db()
+        with conn.cursor() as cur:
+            cur.execute("UPDATE cis_scan_jobs SET status='cancelled', completed_at=NOW() WHERE id=%s AND status IN ('queued','running') RETURNING id", (job_id,))
+            row = cur.fetchone()
+        conn.commit(); conn.close()
+        if row:
+            _cancelled_jobs.add(job_id)
+            return {"success": True, "message": f"Job {job_id} cancelled"}
+    except Exception as ex:
+        return {"success": False, "message": str(ex)}
+    return {"success": False, "message": "Job not running or not found"}
 
 
 def _run_cis_scan_bg(job_id: int, assets: list):
@@ -1243,10 +1264,24 @@ def _run_cis_scan_bg(job_id: int, assets: list):
             total_skipped += sum(1 for r in results if r["status"] == "skip")
             scanned += 1
             _active_jobs[job_id]["progress"] = scanned
+            try:
+                with conn.cursor() as _cur:
+                    _cur.execute("UPDATE cis_scan_jobs SET scanned_vms=%s, passed_checks=%s, failed_checks=%s WHERE id=%s", (scanned, total_passed, total_failed, job_id))
+                conn.commit()
+            except Exception: pass
 
             log.info(f"CIS {vm_name}: {sum(1 for r in results if r['status']=='pass')}/{len(results)} pass")
         except Exception as ex:
             log.warning(f"CIS scan error {vm_name}: {ex}")
+
+        # Check cancellation
+        if job_id in _cancelled_jobs:
+            _cancelled_jobs.discard(job_id)
+            with conn.cursor() as cur:
+                cur.execute("UPDATE cis_scan_jobs SET status='cancelled', completed_at=NOW(), scanned_vms=%s, total_checks=%s, passed_checks=%s, failed_checks=%s, skipped_checks=%s WHERE id=%s", (scanned, total_checks, total_passed, total_failed, total_skipped, job_id))
+            conn.commit(); conn.close()
+            _active_jobs.pop(job_id, None)
+            return
 
     with conn.cursor() as cur:
         cur.execute("""
