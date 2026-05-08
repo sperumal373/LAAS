@@ -8845,6 +8845,27 @@ async def cis_scan(request: Request, u=Depends(require_role("admin","operator"))
     os_family = body.get("os_family") or None
     benchmark = body.get("benchmark") or None
     asset_ids = body.get("asset_ids") or None
+    os_filter = body.get("os_filter") or None  # "rhel8","rhel9","win2016","win2019"
+
+    # Map os_filter shorthand -> filter asset_ids
+    OS_FILTER_PATTERNS = {
+        "rhel8":   ("linux",   "%Red Hat%8%"),
+        "rhel9":   ("linux",   "%Red Hat%9%"),
+        "win2016": ("windows", "%2016%"),
+        "win2019": ("windows", "%2019%"),
+    }
+    if os_filter and not asset_ids and os_filter in OS_FILTER_PATTERNS:
+        fam, pat = OS_FILTER_PATTERNS[os_filter]
+        try:
+            conn = _pg_cis()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM compliance_assets WHERE is_active=TRUE AND ip_address IS NOT NULL AND os_family=%s AND os_name ILIKE %s",
+                    [fam, pat])
+                asset_ids = [r["id"] for r in cur.fetchall()]
+            conn.close()
+        except Exception as ex:
+            return {"job_id": None, "message": str(ex), "total": 0}
 
     # If os_family/benchmark filter given, resolve asset_ids from compliance_assets
     if not asset_ids and (os_family or benchmark):
@@ -8877,7 +8898,8 @@ async def cis_scan(request: Request, u=Depends(require_role("admin","operator"))
 
     result = scan_assets_cis(
         asset_ids=asset_ids or None,
-        triggered_by=u.get("username","system"))
+        triggered_by=u.get("username","system"),
+        os_filter=os_filter or os_family or None)
     return result
 
 
@@ -9241,11 +9263,11 @@ async def cis_os_group_vms(os_key: str, page: int=1, page_size: int=50,
     try:
         conn = _pg_cis()
         cond = OS_KEY_COND.get(os_key, ("1=1","1=1"))
-        where = f"WHERE is_active=TRUE AND ({cond[0]}) AND ({cond[1]})"
+        where = ("WHERE is_active=TRUE AND (" + cond[0] + ") AND (" + cond[1] + ")").replace("%", "%%")
         params = []
         if search:
             where += " AND (hostname ILIKE %s OR ip_address ILIKE %s)"
-            params += [f"%{search}%", f"%{search}%"]
+            params += ["%" + search + "%", "%" + search + "%"]
         with conn.cursor() as cur:
             cur.execute(f"SELECT COUNT(*) AS cnt FROM compliance_assets {where}", params)
             total = cur.fetchone()["cnt"]
