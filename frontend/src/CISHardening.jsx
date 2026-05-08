@@ -1594,6 +1594,8 @@ function CISScanHistory() {
   const [page,     setPage]     = useState(1);
   const [osFilter, setOsFilter] = useState("");
   const [loading,  setLoading]  = useState(false);
+  const [stopping, setStopping] = useState({});
+  const [deleting, setDeleting] = useState({});
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1604,7 +1606,37 @@ function CISScanHistory() {
 
   useEffect(() => { load(); }, [load]);
 
-  const stColor = s => s==="completed"?"#10b981":s==="running"?"#f59e0b":s==="failed"?"#ef4444":"#6b7280";
+  // Auto-refresh every 5s when any job is active
+  useEffect(() => {
+    const hasActive = (data.jobs || []).some(j => ["running","queued","cancelling"].includes(j.status));
+    if (!hasActive) return;
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, [data.jobs, load]);
+
+  const stopScan = async (jobId) => {
+    setStopping(s => ({ ...s, [jobId]: true }));
+    try { await API("/api/cis/scan/" + jobId + "/cancel", { method: "POST" }); load(); }
+    catch(e) {}
+    setStopping(s => ({ ...s, [jobId]: false }));
+  };
+
+  const deleteScan = async (jobId) => {
+    if (!window.confirm("Delete job #" + jobId + " and all its scan data?")) return;
+    setDeleting(s => ({ ...s, [jobId]: true }));
+    try { await API("/api/cis/scan/" + jobId, { method: "DELETE" }); load(); }
+    catch(e) {}
+    setDeleting(s => ({ ...s, [jobId]: false }));
+  };
+
+  const stColor = s =>
+    s === "completed"  ? "#10b981" :
+    s === "running"    ? "#f59e0b" :
+    s === "cancelling" ? "#fb923c" :
+    s === "cancelled"  ? "#6b7280" :
+    s === "failed"     ? "#ef4444" : "#6b7280";
+
+  const hasActive = (data.jobs || []).some(j => ["running","queued"].includes(j.status));
 
   return (
     <div>
@@ -1621,21 +1653,31 @@ function CISScanHistory() {
         <button onClick={load} style={{ background:"#374151", color:"#e2e8f0",
           border:"none", borderRadius:6, padding:"7px 14px", cursor:"pointer" }}>Refresh</button>
         <span style={{ color:"#6b7280", fontSize:12 }}>Total: {data.total} scans</span>
+        {hasActive && (
+          <span style={{ color:"#f59e0b", fontSize:12, display:"flex", alignItems:"center", gap:5 }}>
+            <span style={{ width:8, height:8, borderRadius:"50%", background:"#f59e0b",
+              display:"inline-block", animation:"pulse 1.5s ease-in-out infinite" }} />
+            Auto-refreshing
+          </span>
+        )}
       </div>
-      {loading ? <div style={{ color:"#6b7280" }}>Loading...</div> : (
-        <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-            <thead>
-              <tr style={{ background:"#111827" }}>
-                {["#","Status","OS Filter","Started","Duration","VMs","PowerOn","PowerOff","NA","Pass","Fail","By"].map(h => (
-                  <th key={h} style={{ padding:"8px 10px", color:"#9ca3af", textAlign:"left",
-                    borderBottom:"1px solid #1f2937", whiteSpace:"nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(data.jobs || []).map((j, i) => (
-                <tr key={i} style={{ borderBottom:"1px solid #111827" }}>
+      <div style={{ overflowX:"auto" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+          <thead>
+            <tr style={{ background:"#111827" }}>
+              {["#","Status","OS Filter","Started","Duration","Progress","Pass","Fail","By","Actions"].map(h => (
+                <th key={h} style={{ padding:"8px 10px", color:"#9ca3af", textAlign:"left",
+                  borderBottom:"1px solid #1f2937", whiteSpace:"nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(data.jobs || []).map((j, i) => {
+              const isActive = ["running","queued"].includes(j.status);
+              const pct = j.target_vms > 0 ? Math.round((j.scanned_vms || 0) * 100 / j.target_vms) : 0;
+              return (
+                <tr key={i} style={{ borderBottom:"1px solid #111827",
+                  background: isActive ? "rgba(245,158,11,0.05)" : "transparent" }}>
                   <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.id}</td>
                   <td style={{ padding:"8px 10px" }}>
                     <span style={{ color:stColor(j.status), fontWeight:600 }}>{j.status}</span>
@@ -1645,33 +1687,61 @@ function CISScanHistory() {
                   <td style={{ padding:"8px 10px", color:"#e2e8f0" }}>
                     {j.duration_sec ? (Math.floor(j.duration_sec/60) + "m " + Math.round(j.duration_sec%60) + "s") : "-"}
                   </td>
-                  <td style={{ padding:"8px 10px", color:"#e2e8f0" }}>{j.scanned_vms||0}/{j.target_vms||0}</td>
-                  <td style={{ padding:"8px 10px", color:"#34d399" }}>{j.powered_on||0}</td>
-                  <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.powered_off||0}</td>
-                  <td style={{ padding:"8px 10px", color:"#f97316" }}>{j.not_accessible||0}</td>
+                  <td style={{ padding:"8px 10px", minWidth:110 }}>
+                    <div style={{ color:"#e2e8f0" }}>{j.scanned_vms||0}/{j.target_vms||0}</div>
+                    {isActive && j.target_vms > 0 && (
+                      <div style={{ marginTop:3, height:4, background:"#1f2937", borderRadius:2 }}>
+                        <div style={{ height:4, background:"#f59e0b", borderRadius:2,
+                          width: pct + "%", transition:"width 0.5s" }} />
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding:"8px 10px", color:"#10b981", fontWeight:600 }}>{j.passed_checks||0}</td>
                   <td style={{ padding:"8px 10px", color:"#ef4444", fontWeight:600 }}>{j.failed_checks||0}</td>
                   <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.triggered_by}</td>
+                  <td style={{ padding:"8px 10px" }}>
+                    <div style={{ display:"flex", gap:5 }}>
+                      {isActive && (
+                        <button disabled={stopping[j.id]}
+                          onClick={() => stopScan(j.id)}
+                          style={{ background:"#7f1d1d", color:"#fca5a5", border:"1px solid #991b1b",
+                            borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer",
+                            opacity: stopping[j.id] ? 0.5 : 1, whiteSpace:"nowrap" }}>
+                          {stopping[j.id] ? "Stopping" : " Stop"}
+                        </button>
+                      )}
+                      {!isActive && (
+                        <button disabled={deleting[j.id]}
+                          onClick={() => deleteScan(j.id)}
+                          style={{ background:"#1f2937", color:"#6b7280", border:"1px solid #374151",
+                            borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer",
+                            opacity: deleting[j.id] ? 0.5 : 1 }}>
+                          {deleting[j.id] ? "" : " Delete"}
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {data.pages > 1 && (
-            <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:12 }}>
-              <button disabled={page<=1} onClick={() => setPage(p => p-1)}
-                style={{ background:"#1f2937", color:page<=1?"#374151":"#e2e8f0",
-                  border:"none", borderRadius:5, padding:"4px 14px", cursor:page>1?"pointer":"default" }}>Prev</button>
-              <span style={{ color:"#6b7280", alignSelf:"center", fontSize:13 }}>Page {page}/{data.pages}</span>
-              <button disabled={page>=data.pages} onClick={() => setPage(p => p+1)}
-                style={{ background:"#1f2937", color:page>=data.pages?"#374151":"#e2e8f0",
-                  border:"none", borderRadius:5, padding:"4px 14px", cursor:page<data.pages?"pointer":"default" }}>Next</button>
-            </div>
-          )}
-        </div>
-      )}
+              );
+            })}
+          </tbody>
+        </table>
+        {data.pages > 1 && (
+          <div style={{ display:"flex", gap:8, justifyContent:"center", marginTop:12 }}>
+            <button disabled={page<=1} onClick={() => setPage(p => p-1)}
+              style={{ background:"#1f2937", color:page<=1?"#374151":"#e2e8f0",
+                border:"none", borderRadius:5, padding:"4px 14px", cursor:page>1?"pointer":"default" }}>Prev</button>
+            <span style={{ color:"#6b7280", alignSelf:"center", fontSize:13 }}>Page {page}/{data.pages}</span>
+            <button disabled={page>=data.pages} onClick={() => setPage(p => p+1)}
+              style={{ background:"#1f2937", color:page>=data.pages?"#374151":"#e2e8f0",
+                border:"none", borderRadius:5, padding:"4px 14px", cursor:page<data.pages?"pointer":"default" }}>Next</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
 
 //  Baselines tab 
 function CISBaselines() {

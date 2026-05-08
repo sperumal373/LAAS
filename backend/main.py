@@ -9318,6 +9318,36 @@ async def cis_cancel_scan(job_id: int, u=Depends(require_role("admin","operator"
     return cancel_scan(job_id)
 
 
+@app.delete("/api/cis/scan/{job_id}")
+async def cis_delete_scan(job_id: int, u=Depends(require_role("admin","operator"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM cis_remediation_log WHERE job_id=%s", (job_id,))
+            cur.execute("DELETE FROM cis_check_results WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
+            cur.execute("DELETE FROM cis_vm_scans WHERE job_id=%s", (job_id,))
+            cur.execute("DELETE FROM cis_scan_jobs WHERE id=%s", (job_id,))
+        conn.commit(); conn.close()
+        return {"success": True}
+    except Exception as ex:
+        return {"success": False, "error": str(ex)}
+
+
+@app.delete("/api/cis/scan/{job_id}")
+async def cis_delete_scan(job_id: int, u=Depends(require_role("admin","operator"))):
+    try:
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM cis_remediation_log WHERE job_id=%s", (job_id,))
+            cur.execute("DELETE FROM cis_check_results WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
+            cur.execute("DELETE FROM cis_vm_scans WHERE job_id=%s", (job_id,))
+            cur.execute("DELETE FROM cis_scan_jobs WHERE id=%s", (job_id,))
+        conn.commit(); conn.close()
+        return {"success": True}
+    except Exception as ex:
+        return {"success": False, "error": str(ex)}
+
+
 @app.post("/api/cis/scan/{job_id}/cancel")
 async def cis_cancel_scan(job_id: int, u=Depends(require_role("admin","operator"))):
     return cancel_scan(job_id)
