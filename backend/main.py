@@ -9323,7 +9323,8 @@ async def cis_delete_scan(job_id: int, u=Depends(require_role("admin","operator"
     try:
         conn = _pg_cis()
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM cis_remediation_log WHERE job_id=%s", (job_id,))
+            # Delete remediation log via vm_scan_id
+            cur.execute("DELETE FROM cis_remediation_log WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
             cur.execute("DELETE FROM cis_check_results WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
             cur.execute("DELETE FROM cis_vm_scans WHERE job_id=%s", (job_id,))
             cur.execute("DELETE FROM cis_scan_jobs WHERE id=%s", (job_id,))
@@ -9338,7 +9339,8 @@ async def cis_delete_scan(job_id: int, u=Depends(require_role("admin","operator"
     try:
         conn = _pg_cis()
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM cis_remediation_log WHERE job_id=%s", (job_id,))
+            # Delete remediation log via vm_scan_id
+            cur.execute("DELETE FROM cis_remediation_log WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
             cur.execute("DELETE FROM cis_check_results WHERE vm_scan_id IN (SELECT id FROM cis_vm_scans WHERE job_id=%s)", (job_id,))
             cur.execute("DELETE FROM cis_vm_scans WHERE job_id=%s", (job_id,))
             cur.execute("DELETE FROM cis_scan_jobs WHERE id=%s", (job_id,))
