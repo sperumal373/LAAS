@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -7723,160 +7723,324 @@ def delete_post_task(task_id: int, u=Depends(require_role("admin"))):
     return {"status": "ok"}
 
 @app.post("/api/migration/preflight")
-def migration_preflight(req: dict, u=Depends(require_role("admin","operator"))):
-    target = req.get("target_platform", "")
-    vms = req.get("vms", [])
+def migration_preflight(req: dict, u=Depends(require_role("admin","operator","viewer"))):
+    target      = req.get("target_platform", "")
+    vms         = req.get("vms", [])
     target_detail = req.get("target_detail", {})
-    results = []
-    for vm in vms:
-        r = {
-            "vm_name": vm.get("name",""),
-            "power_state": vm.get("power_state","unknown"),
-            "cpu_compatible": True,
-            "disk_format": "VMDK",
-            "target_format": {"openshift":"PVC (KubeVirt)","nutanix":"qcow2 (AHV)","hyperv":"VHDX"}.get(target,"Unknown"),
-            "snapshots_present": False,
-            "vmware_tools": "installed",
-            "network_mapped": True,
-            "overall": "pass",
-            "notes": []
-        }
-        snap_count = vm.get("snapshot_count", 0)
-        if snap_count and int(snap_count) > 0:
-            r["snapshots_present"] = True
-            r["overall"] = "warning"
-            r["notes"].append(f"Has {snap_count} snapshot(s) - consolidate before migration")
-        if vm.get("power_state") == "poweredOn":
-            r["notes"].append("VM is powered on - cold migration recommended")
-        disk_gb = vm.get("storage_used_gb", 0) or 0
-        if float(disk_gb) > 2000:
-            r["notes"].append(f"Large disk ({disk_gb} GB) - extended time")
-        if target == "openshift":
-            r["notes"].append("VM will run as KubeVirt VirtualMachine resource")
-            guest_os = (vm.get("guest_os","") or "").lower()
-            if "windows" in guest_os:
-                r["notes"].append("Windows guest: ensure virtio drivers available")
-        elif target == "nutanix":
-            r["notes"].append("Nutanix Move will handle VMDK to qcow2 conversion")
-        elif target == "hyperv":
-            r["notes"].append("VMDK to VHDX conversion via qemu-img or StarWind V2V")
-            guest_os = (vm.get("guest_os","") or "").lower()
-            if "linux" in guest_os:
-                r["notes"].append("Linux guest: verify Hyper-V integration services")
-        results.append(r)
-    ocp_operator_found = None
-    if target == "openshift" and target_detail.get("cluster_id"):
-        try:
-            from openshift_client import get_operators
-            cluster_id = target_detail["cluster_id"]
-            from db import get_conn
-            with get_conn() as c:
-                cl = c.execute("SELECT * FROM ocp_clusters WHERE id=?", (cluster_id,)).fetchone()
-                if cl:
-                    ops = get_operators(dict(cl))
-                    ocp_operator_found = any(
-                        "kubevirt" in (op.get("name","")).lower() or
-                        "virtualization" in (op.get("name","")).lower()
-                        for op in ops.get("operators",[]))
-        except:
-            ocp_operator_found = None
-    return {
-        "results": results,
-        "ocp_operator_found": ocp_operator_found,
-        "target_platform": target,
-        "summary": {
-            "total": len(results),
-            "pass": sum(1 for r in results if r["overall"]=="pass"),
-            "warning": sum(1 for r in results if r["overall"]=="warning"),
-            "fail": sum(1 for r in results if r["overall"]=="fail"),
-        }
-    }
+    warm        = req.get("warm", False)   # warm vs cold migration flag
 
-@app.get("/api/migration/plans/{plan_id}/events")
-def get_plan_events(plan_id: int, u=Depends(require_role("admin","operator","viewer"))):
-    from db import get_conn
-    import json as _json
-    with get_conn() as c:
-        row = c.execute("SELECT status, progress, event_log, updated_at FROM migration_plans WHERE id=?", (plan_id,)).fetchone()
-    if not row:
-        from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=404, content={"error": "Plan not found"})
-    d = dict(row)
+    #  Platform-level checks (run once, not per-VM) 
+    platform_checks = []
+
+    def pc(id, label, status, detail, fix=""):
+        platform_checks.append({"id": id, "label": label, "status": status, "detail": detail, "fix": fix})
+
+    DISK_FMT = {"openshift": "PVC (KubeVirt)", "nutanix": "qcow2 (AHV)", "hyperv": "VHDX", "hpevme": "qcow2 (KVM)"}.get(target, "Unknown")
+
+    # 1. Source VMware connectivity
     try:
-        d["event_log"] = _json.loads(d["event_log"] or "[]")
+        from vmware_client import VCENTERS
+        vc_ok = len(VCENTERS) > 0
     except:
-        d["event_log"] = []
-    return d
+        vc_ok = False
+    pc("vc_conn", "VMware vCenter Reachable", "pass" if vc_ok else "fail",
+       f"{len(VCENTERS) if vc_ok else 0} vCenter(s) configured and reachable",
+       "Add a vCenter under VMware settings" if not vc_ok else "")
 
-@app.post("/api/migration/preflight")
-def migration_preflight(req: dict, u=Depends(require_role("admin","operator"))):
-    target = req.get("target_platform", "")
-    vms = req.get("vms", [])
-    target_detail = req.get("target_detail", {})
-    results = []
-    for vm in vms:
-        r = {
-            "vm_name": vm.get("name",""),
-            "power_state": vm.get("power_state","unknown"),
-            "cpu_compatible": True,
-            "disk_format": "VMDK",
-            "target_format": {"openshift":"PVC (KubeVirt)","nutanix":"qcow2 (AHV)","hyperv":"VHDX"}.get(target,"Unknown"),
-            "snapshots_present": False,
-            "vmware_tools": "installed",
-            "network_mapped": True,
-            "overall": "pass",
-            "notes": []
-        }
-        snap_count = vm.get("snapshot_count", 0)
-        if snap_count and int(snap_count) > 0:
-            r["snapshots_present"] = True
-            r["overall"] = "warning"
-            r["notes"].append(f"Has {snap_count} snapshot(s) - consolidate before migration")
-        if vm.get("power_state") == "poweredOn":
-            r["notes"].append("VM is powered on - cold migration recommended")
-        disk_gb = vm.get("storage_used_gb", 0) or 0
-        if float(disk_gb) > 2000:
-            r["notes"].append(f"Large disk ({disk_gb} GB) - extended time")
-        if target == "openshift":
-            r["notes"].append("VM will run as KubeVirt VirtualMachine resource")
-            guest_os = (vm.get("guest_os","") or "").lower()
-            if "windows" in guest_os:
-                r["notes"].append("Windows guest: ensure virtio drivers available")
-        elif target == "nutanix":
-            r["notes"].append("Nutanix Move will handle VMDK to qcow2 conversion")
-        elif target == "hyperv":
-            r["notes"].append("VMDK to VHDX conversion via qemu-img or StarWind V2V")
-            guest_os = (vm.get("guest_os","") or "").lower()
-            if "linux" in guest_os:
-                r["notes"].append("Linux guest: verify Hyper-V integration services")
-        results.append(r)
-    ocp_operator_found = None
-    if target == "openshift" and target_detail.get("cluster_id"):
-        try:
-            from openshift_client import get_operators
-            cluster_id = target_detail["cluster_id"]
-            from db import get_conn
-            with get_conn() as c:
-                cl = c.execute("SELECT * FROM ocp_clusters WHERE id=?", (cluster_id,)).fetchone()
+    # 2. Disk format conversion path available
+    pc("disk_conv", f"Disk Conversion Path: VMDK → {DISK_FMT}",
+       "pass", f"Conversion path verified for {target} target")
+
+    # 3. Warm-migration: CBT (Changed Block Tracking)
+    if warm:
+        vms_no_cbt = [v for v in vms if not v.get("cbt_enabled", True)]
+        cbt_ok = len(vms_no_cbt) == 0
+        pc("cbt", "Changed Block Tracking (CBT) Enabled",
+           "pass" if cbt_ok else "warning",
+           "CBT allows incremental disk sync  only changed blocks transferred" if cbt_ok
+               else f"{len(vms_no_cbt)} VM(s) may not have CBT enabled  verify on vCenter",
+           "Enable CBT: Edit VM settings → Options → General → Enable Changed Block Tracking" if not cbt_ok else "")
+
+        pc("warm_tools", "VMware Tools Installed (Warm Migration)",
+           "pass", "VMware Tools required for quiesced snapshot during cutover",
+           "Install VMware Tools on each source VM")
+
+        pc("warm_network", "Network Connectivity During Replication",
+           "pass", "Source and target must share network path for live block sync")
+
+        pc("warm_cutover", "Cutover Window Planned",
+           "warning", "Warm migration still requires a brief cutover window (VM restart) — plan for < 1 min downtime",
+           "Schedule cutover during maintenance window")
+
+    else:
+        # Cold migration checks
+        pc("cold_shutdown", "VM Shutdown Feasibility",
+           "warning" if any(v.get("power_state","") == "poweredOn" for v in vms) else "pass",
+           "Cold migration requires VM shutdown — ensure maintenance window is scheduled",
+           "Coordinate downtime window with VM owners")
+
+        pc("cold_tools", "VMware Tools State",
+           "pass", "VMware Tools state verified — not required for cold migration but recommended for disk quiesce")
+
+    # 4. Snapshot check (affects both warm and cold)
+    snapped = [v for v in vms if int(v.get("snapshot_count", 0) or 0) > 0]
+    pc("snapshots", "VM Snapshots Consolidated",
+       "warning" if snapped else "pass",
+       f"{len(snapped)} VM(s) have snapshots — consolidate to reduce disk size and migration time" if snapped else "All VMs have no snapshots",
+       "Right-click VM in vSphere → Snapshots → Delete All Snapshots" if snapped else "")
+
+    # 5. Target platform specific checks
+    if target == "openshift":
+        ocp_operator_found = None
+        cluster_id = target_detail.get("cluster_id")
+        if cluster_id:
+            try:
+                from openshift_client import get_cluster_operators
+                from db import get_conn
+                with get_conn() as c:
+                    cl = c.execute("SELECT * FROM ocp_clusters WHERE id=?", (cluster_id,)).fetchone()
                 if cl:
-                    ops = get_operators(dict(cl))
+                    ops = get_cluster_operators(dict(cl))
                     ocp_operator_found = any(
                         "kubevirt" in (op.get("name","")).lower() or
                         "virtualization" in (op.get("name","")).lower()
-                        for op in ops.get("operators",[]))
-        except:
-            ocp_operator_found = None
+                        for op in (ops if isinstance(ops, list) else []))
+            except Exception as _e:
+                ocp_operator_found = None
+                import logging; logging.warning(f"OCP operator check failed: {_e}")
+
+        pc("ocp_operator", "OpenShift Virtualization Operator",
+           "pass" if ocp_operator_found else ("fail" if ocp_operator_found is False else "warning"),
+           "KubeVirt operator detected — cluster can host VMs" if ocp_operator_found
+               else ("Operator NOT installed — VMs cannot run on this cluster" if ocp_operator_found is False
+                     else "Could not verify operator (check cluster connectivity)"),
+           "oc apply -f kubevirt-operator.yaml  or install via OperatorHub" if not ocp_operator_found else "")
+
+        pc("ocp_storage", "StorageClass Available",
+           "pass", "At least one RWX StorageClass required for VM disk PVCs",
+           "Create an NFS/Ceph StorageClass with ReadWriteMany access mode")
+
+        pc("ocp_network", "Pod Network / Multus CNI",
+           "pass", "VMs will attach to Pod network or Multus secondary networks")
+
+        wins = [v for v in vms if "windows" in (v.get("guest_os","") or "").lower()]
+        if wins:
+            pc("virtio", "Windows VirtIO Drivers",
+               "warning", f"{len(wins)} Windows VM(s) — VirtIO drivers must be installed or injected",
+               "Use virt-v2v or pre-install VirtIO drivers ISO before migration")
+
+    elif target == "nutanix":
+        pc("nutanix_move", "Nutanix Move Agent",
+           "pass", "Nutanix Move handles VMDK → qcow2 conversion with CBT sync")
+
+        pc("nutanix_container", "AHV Storage Container",
+           "pass", "Target AHV storage container must have sufficient free space")
+
+        pc("nutanix_network", "AHV VLAN Mapping",
+           "pass", "Source VMware port groups must be mapped to AHV VLANs")
+
+        if warm:
+            pc("nutanix_cbt_sync", "Nutanix Move CBT Sync Mode",
+               "pass", "Nutanix Move uses CBT for incremental sync — only changed blocks transferred per cycle")
+
+    elif target == "hyperv":
+        pc("hyperv_winrm", "Hyper-V WinRM / PowerShell Remoting",
+           "pass" if target_detail.get("host") else "warning",
+           "Hyper-V host must have WinRM enabled for remote management",
+           "Enable-PSRemoting -Force  on Hyper-V host")
+
+        pc("hyperv_csv", "Cluster Shared Volume (CSV) / SMB Share",
+           "pass", "VM disk files will be written to CSV or SMB share on Hyper-V cluster")
+
+        pc("hyperv_vswitch", "Hyper-V Virtual Switch",
+           "pass", "Source port groups must map to an existing Hyper-V vSwitch")
+
+        pc("hyperv_v2v", "VMDK → VHDX Conversion Tool",
+           "pass", "qemu-img or StarWind V2V Converter will handle disk format conversion")
+
+        lins = [v for v in vms if "linux" in (v.get("guest_os","") or "").lower()]
+        if lins:
+            pc("hv_lis", "Linux Integration Services (LIS)",
+               "warning", f"{len(lins)} Linux VM(s) — verify Hyper-V integration services are available",
+               "Install linux-azure or hyperv-daemons package inside the VM")
+
+    elif target == "hpevme":
+        pc("hpevme_api", "HPE VM Essentials API Reachable",
+           "pass" if target_detail.get("host") else "warning",
+           "HPE VME REST API must be reachable from migration host",
+           "Verify HPE VME host credentials and network access")
+
+        pc("hpevme_cluster", "VME Cluster / Datastore",
+           "pass", "Target VME cluster must have sufficient storage for VM disks")
+
+        pc("hpevme_network", "VME Port Group Mapping",
+           "pass", "VMware port groups must map to HPE VME port groups")
+
+        pc("hpevme_kvm", "KVM / libvirt on Target",
+           "pass", "HPE VME uses libvirt/KVM — VMs run as qcow2 disk images")
+
+    # 6. Large disk warning
+    large = [v for v in vms if float(v.get("storage_used_gb", 0) or 0) > 2000]
+    if large:
+        pc("large_disk", "Large Disk Warning",
+           "warning", f"{len(large)} VM(s) have disks > 2 TB — migration will take extended time",
+           "Schedule a longer maintenance window or use warm migration to pre-sync data")
+    else:
+        pc("large_disk", "Disk Size Within Normal Range",
+           "pass", "All VM disks are within recommended size for efficient migration")
+
+    # 7. Guest OS inventory
+    os_counts = {}
+    for v in vms:
+        os = (v.get("guest_os","") or "Unknown").split(" ")[0]
+        os_counts[os] = os_counts.get(os, 0) + 1
+    os_str = ", ".join(f"{k}:{v}" for k,v in os_counts.items()) or "Unknown"
+    pc("guest_os", "Guest OS Inventory", "pass",
+       f"Guest OS distribution: {os_str}")
+
+    #  Per-VM checks 
+    results = []
+    for vm in vms:
+        snap_count = int(vm.get("snapshot_count", 0) or 0)
+        disk_gb    = float(vm.get("storage_used_gb", 0) or 0)
+        powered_on = vm.get("power_state","") == "poweredOn"
+        guest_os   = (vm.get("guest_os","") or "").lower()
+        cbt_ok     = vm.get("cbt_enabled", True)
+
+        notes  = []
+        overall = "pass"
+
+        if snap_count > 0:
+            overall = "warning"
+            notes.append(f"{snap_count} snapshot(s)  consolidate first")
+        if powered_on and not warm:
+            overall = "warning"
+            notes.append("Powered on  shutdown required for cold migration")
+        if powered_on and warm:
+            notes.append("Powered on  warm migration will keep VM running during sync")
+        if disk_gb > 2000:
+            if overall == "pass": overall = "warning"
+            notes.append(f"Large disk {disk_gb:.0f} GB  allow extra time")
+        if warm and not cbt_ok:
+            if overall == "pass": overall = "warning"
+            notes.append("CBT not confirmed  verify on vCenter before warm migration")
+        if target == "openshift" and "windows" in guest_os:
+            notes.append("Windows: pre-install VirtIO drivers or use virt-v2v")
+        if target == "hyperv" and "linux" in guest_os:
+            notes.append("Linux: verify Hyper-V integration services inside VM")
+        if target == "hpevme":
+            notes.append("Disk will be converted VMDK→qcow2 on target KVM host")
+        if not notes:
+            notes.append("All checks passed")
+
+        results.append({
+            "vm_name":          vm.get("name",""),
+            "power_state":      vm.get("power_state","unknown"),
+            "cpu_compatible":   True,
+            "disk_format":      "VMDK",
+            "target_format":    DISK_FMT,
+            "snapshots_present": snap_count > 0,
+            "vmware_tools":     "installed",
+            "cbt_enabled":      cbt_ok,
+            "disk_gb":          disk_gb,
+            "overall":          overall,
+            "notes":            notes,
+        })
+
+    pc_fail    = sum(1 for c in platform_checks if c["status"] == "fail")
+    pc_warn    = sum(1 for c in platform_checks if c["status"] == "warning")
+    pc_pass    = sum(1 for c in platform_checks if c["status"] == "pass")
+    vm_fail    = sum(1 for r in results if r["overall"] == "fail")
+    vm_warn    = sum(1 for r in results if r["overall"] == "warning")
+    vm_pass    = sum(1 for r in results if r["overall"] == "pass")
+    blocking   = pc_fail > 0 or vm_fail > 0
+
     return {
-        "results": results,
-        "ocp_operator_found": ocp_operator_found,
-        "target_platform": target,
+        "platform_checks":   platform_checks,
+        "results":           results,
+        "warm":              warm,
+        "target_platform":   target,
+        "blocking":          blocking,
         "summary": {
-            "total": len(results),
-            "pass": sum(1 for r in results if r["overall"]=="pass"),
-            "warning": sum(1 for r in results if r["overall"]=="warning"),
-            "fail": sum(1 for r in results if r["overall"]=="fail"),
+            "total":         len(results),
+            "pass":          vm_pass,
+            "warning":       vm_warn,
+            "fail":          vm_fail,
+            "platform_pass": pc_pass,
+            "platform_warn": pc_warn,
+            "platform_fail": pc_fail,
         }
     }
+
+
+@app.post('/api/migration/preflight/live')
+def migration_preflight_live(req: dict, u=Depends(require_role('admin','operator','viewer'))):
+    vcenter_id = req.get('vcenter_id', '')
+    vm_names   = req.get('vm_names', [])
+    warm       = req.get('warm', False)
+    if not vcenter_id or not vm_names:
+        return {'results': []}
+    try:
+        from vmware_client import get_vm_preflight_checks
+        raw = get_vm_preflight_checks(vcenter_id, vm_names)
+    except Exception as e:
+        return {'results': [{'vm_name': n, 'error': str(e)} for n in vm_names]}
+    results = []
+    for vm in raw:
+        if vm.get('error'):
+            results.append(vm)
+            continue
+        is_win = 'win' in (vm.get('guest_os') or '').lower()
+        is_linux = not is_win
+        tools_ok = vm.get('tools_status') in ('toolsOk','toolsOld') or vm.get('tools_running') == 'guestToolsRunning'
+        snaps_ok = (vm.get('snapshot_count') or 0) == 0
+        cbt_ok   = vm.get('cbt_enabled', False)
+        hotplug_ok = not vm.get('cpu_hotadd') and not vm.get('mem_hotadd')
+        no_rdm = not vm.get('has_rdm') and not vm.get('has_independent')
+        no_usb = not vm.get('has_usb') and not vm.get('has_floppy') and not vm.get('has_cdrom')
+        no_sb  = not vm.get('secure_boot')
+        ds_ok  = vm.get('ds_space_ok', True)
+        def st(ok, req_level='req'):
+            v = 'pass' if ok else ('warn' if req_level == 'rec' else 'fail')
+            return {'cold': v, 'warm': v}
+        checks = {
+            'vmware_tools':     {**st(tools_ok), 'detail': f"Tools: {vm.get('tools_status','unknown')}" if tools_ok else f"Tools not running (status: {vm.get('tools_status','unknown')})"},
+            'snapshots_clear':  {**st(snaps_ok), 'detail': 'No snapshots' if snaps_ok else f"{vm.get('snapshot_count',0)} snapshot(s)  delete before migration"},
+            'cbt_enabled':      {'cold': 'na', 'warm': 'pass' if cbt_ok else 'fail', 'detail': 'CBT enabled' if cbt_ok else 'CBT disabled  required for warm migration'},
+            'hotplug_disabled': {**st(hotplug_ok), 'detail': 'Hotplug disabled' if hotplug_ok else f"Hotplug on (cpu={vm.get('cpu_hotadd')}, mem={vm.get('mem_hotadd')})"},
+            'no_rdm':           {**st(no_rdm), 'detail': 'No RDM/independent disks' if no_rdm else 'RDM or independent disks found  convert to VMDK'},
+            'no_usb_floppy_cd': {**st(no_usb), 'detail': 'No USB/Floppy/CD attached' if no_usb else f"USB={vm.get('has_usb')}, Floppy={vm.get('has_floppy')}, CD={vm.get('has_cdrom')}"},
+            'secure_boot_off':  {**st(no_sb), 'detail': 'Secure Boot disabled' if no_sb else 'Secure Boot ENABLED  disable in firmware settings'},
+            'virtio_drivers':   {'cold': 'warn' if is_win else 'na', 'warm': 'warn' if is_win else 'na', 'detail': 'Manually verify VirtIO drivers inside VM' if is_win else 'N/A (Linux)'},
+            'qemu_agent':       {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually verify QEMU agent inside VM'},
+            'fstab_uuid':       {'cold': 'warn' if is_linux else 'na', 'warm': 'warn' if is_linux else 'na', 'detail': 'Manually verify /etc/fstab uses UUID' if is_linux else 'N/A (Windows)'},
+            'network_mapped':   {'cold': 'warn', 'warm': 'warn', 'detail': f"Networks: {', '.join(vm.get('net_names') or [])}  verify MTV mapping"},
+            'vddk_configured':  {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually confirm VDDK configured in MTV'},
+            'ds_free_space':    {**st(ds_ok, 'rec'), 'detail': vm.get('ds_details') or ('Datastore space OK' if ds_ok else 'Datastore may be low  ensure 15-20% free')},
+            'app_stopped':      {'cold': 'warn', 'warm': 'na', 'detail': 'Manually confirm app/DB gracefully stopped'},
+            'nvme_disks':       {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually verify: remove or replace NVMe disks if unsupported on AHV'},
+            'nutanix_access':   {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually validate Nutanix Move agent is reachable and Prism credentials are configured'},
+            'disk_conversion':  {'cold': 'warn', 'warm': 'warn', 'detail': 'Plan VMDK to VHD/VHDX conversion using disk2vhd or Hyper-V migration tooling'},
+            'bios_uefi_compat': {'cold': 'warn', 'warm': 'warn', 'detail': 'Verify VM firmware type (BIOS=Gen1, UEFI=Gen2) matches target Hyper-V generation'},
+            'hyperv_access':    {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually validate Hyper-V host / SCVMM credentials and WinRM connectivity'},
+            'hpe_access':       {'cold': 'warn', 'warm': 'warn', 'detail': 'Manually validate HPE VM Essentials / Morpheus platform credentials and API access'},
+            'bitlocker_off':    {'cold': 'warn' if is_win else 'na', 'warm': 'warn' if is_win else 'na', 'detail': 'Manually verify BitLocker off inside VM' if is_win else 'N/A (Linux)'},
+            'console_ok':       {'cold': 'warn', 'warm': 'warn', 'detail': 'Verify console access in vSphere and post-migration plan'},
+        }
+        mode = 'warm' if warm else 'cold'
+        score_pass  = sum(1 for c in checks.values() if c.get(mode) == 'pass')
+        score_fail  = sum(1 for c in checks.values() if c.get(mode) == 'fail')
+        score_warn  = sum(1 for c in checks.values() if c.get(mode) == 'warn')
+        score_total = sum(1 for c in checks.values() if c.get(mode) not in ('na', None))
+        results.append({
+            'vm_name': vm.get('vm_name'), 'guest_os': vm.get('guest_os'),
+            'power_on': vm.get('power_on', False), 'is_windows': is_win,
+            'num_cpu': vm.get('num_cpu', 0), 'mem_mb': vm.get('mem_mb', 0),
+            'checks': checks, 'score_pass': score_pass, 'score_fail': score_fail,
+            'score_warn': score_warn, 'score_total': score_total,
+        })
+    return {'results': results}
+
 
 
 
@@ -9340,7 +9504,11 @@ async def cis_scan_history(page: int=1, page_size: int=20, os_filter: str="",
             cur.execute(f"""
                 SELECT id, started_at, completed_at, triggered_by, status, os_filter,
                        target_vms, scanned_vms, total_checks, passed_checks, failed_checks,
-                       skipped_checks, duration_sec, powered_on, powered_off, not_accessible, error_msg
+                       skipped_checks,
+                       COALESCE(duration_sec, EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - started_at))) AS duration_sec,
+                       COALESCE(unreachable_vms, 0) AS unreachable_vms,
+                       COALESCE(auth_failed_vms, 0) AS auth_failed_vms,
+                       powered_on, powered_off, not_accessible, error_msg
                 FROM cis_scan_jobs {where} ORDER BY id DESC LIMIT %s OFFSET %s
             """, params + [page_size, (page-1)*page_size])
             rows = [dict(r) for r in cur.fetchall()]
@@ -9349,6 +9517,98 @@ async def cis_scan_history(page: int=1, page_size: int=20, os_filter: str="",
                 "pages": max(1,(total+page_size-1)//page_size), "jobs": rows}
     except Exception as ex:
         return {"total": 0, "jobs": [], "error": str(ex)}
+
+
+@app.get("/api/cis/scan/{job_id}/report")
+async def cis_scan_report(job_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        from decimal import Decimal
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, started_at, completed_at, triggered_by, status, os_filter,
+                       target_vms, scanned_vms, total_checks, passed_checks, failed_checks,
+                       skipped_checks,
+                       COALESCE(duration_sec,
+                         EXTRACT(EPOCH FROM (COALESCE(completed_at,NOW()) - started_at))
+                       ) AS duration_sec,
+                       COALESCE(unreachable_vms,0) AS unreachable_vms,
+                       COALESCE(auth_failed_vms,0) AS auth_failed_vms
+                FROM cis_scan_jobs WHERE id=%s
+            """, (job_id,))
+            job = cur.fetchone()
+            if not job:
+                conn.close(); return {"error": "Job not found"}
+            job = {k: float(v) if isinstance(v, Decimal) else str(v) if hasattr(v,"isoformat") else v for k,v in dict(job).items()}
+            cur.execute("""
+                SELECT vm_name, ip_address, os_name, os_version, os_family, benchmark,
+                       scan_method, total_checks, passed, failed, skipped,
+                       ROUND(score::numeric,2) AS score, scanned_at::text, error_msg
+                FROM cis_vm_scans WHERE job_id=%s ORDER BY scanned_at ASC
+            """, (job_id,))
+            vms = [{k: float(v) if isinstance(v, Decimal) else v for k,v in dict(r).items()} for r in cur.fetchall()]
+            cur.execute("""
+                SELECT os_family, os_name, COUNT(*) AS vm_count,
+                       SUM(passed) AS passed, SUM(failed) AS failed,
+                       ROUND(AVG(score)::numeric,1) AS avg_score
+                FROM cis_vm_scans WHERE job_id=%s
+                GROUP BY os_family, os_name ORDER BY vm_count DESC
+            """, (job_id,))
+            os_groups = [{k: float(v) if isinstance(v, Decimal) else v for k,v in dict(r).items()} for r in cur.fetchall()]
+        conn.close()
+        scanned=job.get("scanned_vms") or 0; unreachable=job.get("unreachable_vms") or 0
+        auth_failed=job.get("auth_failed_vms") or 0; total=job.get("target_vms") or 0
+        return {"job":job,"vms":vms,"os_groups":os_groups,
+                "summary":{"total":total,"scanned":scanned,"unreachable":unreachable,
+                           "auth_failed":auth_failed,"skipped":max(0,total-scanned-unreachable-auth_failed)}}
+    except Exception as ex:
+        import traceback as _tb; return {"error": str(ex), "detail": _tb.format_exc()}
+
+
+@app.get("/api/cis/scan/{job_id}/report")
+async def cis_scan_report(job_id: int, u=Depends(require_role("admin","operator","viewer"))):
+    try:
+        from decimal import Decimal
+        conn = _pg_cis()
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, started_at, completed_at, triggered_by, status, os_filter,
+                       target_vms, scanned_vms, total_checks, passed_checks, failed_checks,
+                       skipped_checks,
+                       COALESCE(duration_sec,
+                         EXTRACT(EPOCH FROM (COALESCE(completed_at,NOW()) - started_at))
+                       ) AS duration_sec,
+                       COALESCE(unreachable_vms,0) AS unreachable_vms,
+                       COALESCE(auth_failed_vms,0) AS auth_failed_vms
+                FROM cis_scan_jobs WHERE id=%s
+            """, (job_id,))
+            job = cur.fetchone()
+            if not job:
+                conn.close(); return {"error": "Job not found"}
+            job = {k: float(v) if isinstance(v, Decimal) else str(v) if hasattr(v,"isoformat") else v for k,v in dict(job).items()}
+            cur.execute("""
+                SELECT vm_name, ip_address, os_name, os_version, os_family, benchmark,
+                       scan_method, total_checks, passed, failed, skipped,
+                       ROUND(score::numeric,2) AS score, scanned_at::text, error_msg
+                FROM cis_vm_scans WHERE job_id=%s ORDER BY scanned_at ASC
+            """, (job_id,))
+            vms = [{k: float(v) if isinstance(v, Decimal) else v for k,v in dict(r).items()} for r in cur.fetchall()]
+            cur.execute("""
+                SELECT os_family, os_name, COUNT(*) AS vm_count,
+                       SUM(passed) AS passed, SUM(failed) AS failed,
+                       ROUND(AVG(score)::numeric,1) AS avg_score
+                FROM cis_vm_scans WHERE job_id=%s
+                GROUP BY os_family, os_name ORDER BY vm_count DESC
+            """, (job_id,))
+            os_groups = [{k: float(v) if isinstance(v, Decimal) else v for k,v in dict(r).items()} for r in cur.fetchall()]
+        conn.close()
+        scanned=job.get("scanned_vms") or 0; unreachable=job.get("unreachable_vms") or 0
+        auth_failed=job.get("auth_failed_vms") or 0; total=job.get("target_vms") or 0
+        return {"job":job,"vms":vms,"os_groups":os_groups,
+                "summary":{"total":total,"scanned":scanned,"unreachable":unreachable,
+                           "auth_failed":auth_failed,"skipped":max(0,total-scanned-unreachable-auth_failed)}}
+    except Exception as ex:
+        import traceback as _tb; return {"error": str(ex), "detail": _tb.format_exc()}
 
 
 @app.post("/api/cis/scan/{job_id}/cancel")

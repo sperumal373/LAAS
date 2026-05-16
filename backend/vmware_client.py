@@ -2580,3 +2580,181 @@ def get_volume_vcenter_mapping(naa_id: str = "", wwn: str = "",
                         pass
 
     return all_results
+
+# 
+# Live Deep Pre-flight Check for VMware  OpenShift Migration
+# 
+
+def get_vm_preflight_checks(vcenter_id: str, vm_names: list) -> list:
+    """
+    For each VM name, connect to vCenter and gather live data for the
+    16-item pre-flight checklist (matching the standard checklist image).
+    Returns a list of dicts, one per VM.
+    """
+    from pyVmomi import vim  # local import safe
+    vc = _vc_by_id(vcenter_id)
+    if not vc:
+        return [{"vm_name": n, "error": "vCenter not found"} for n in vm_names]
+
+    try:
+        si = _connect(vc)
+    except Exception as e:
+        return [{"vm_name": n, "error": str(e)} for n in vm_names]
+
+    content = si.RetrieveContent()
+    cnt = content.viewManager.CreateContainerView(content.rootFolder, [vim.VirtualMachine], True)
+
+    # Build name->vm map
+    vm_map = {}
+    for vm in cnt.view:
+        if vm.config:
+            vm_map[vm.config.name] = vm
+    cnt.Destroy()
+
+    results = []
+    for vm_name in vm_names:
+        vm = vm_map.get(vm_name)
+        if not vm:
+            results.append({"vm_name": vm_name, "error": "VM not found in vCenter"})
+            continue
+        try:
+            cfg   = vm.config
+            hw    = cfg.hardware if cfg else None
+            rt    = vm.runtime
+            guest = vm.guest
+
+            # Power state
+            power_on = str(rt.powerState) == "poweredOn" if rt else False
+
+            # --- 1. VMware Tools updated ---
+            tools_status  = str(guest.toolsRunningStatus  or "") if guest else ""
+            tools_version = str(guest.toolsVersionStatus2 or "") if guest else ""
+            tools_ok      = tools_status in ("guestToolsRunning",) and tools_version in ("guestToolsCurrent",)
+            tools_detail  = f"Status={tools_status}, Version={tools_version}"
+
+            # --- 2. Snapshots ---
+            snap_count = 0
+            if vm.snapshot:
+                def _cnt(lst):
+                    return sum(1 + _cnt(x.childSnapshotList) for x in lst)
+                snap_count = _cnt(vm.snapshot.rootSnapshotList)
+
+            # --- 3. CBT (Changed Block Tracking) ---
+            cbt_enabled = bool(cfg.changeTrackingEnabled) if cfg else False
+
+            # --- 4. CPU/Memory hotplug ---
+            cpu_hotadd  = bool(cfg.cpuHotAddEnabled)      if cfg else False
+            cpu_hotremove = bool(cfg.cpuHotRemoveEnabled) if cfg else False
+            mem_hotadd  = bool(cfg.memoryHotAddEnabled)   if cfg else False
+            hotplug_disabled = not (cpu_hotadd or cpu_hotremove or mem_hotadd)
+
+            # --- 5. RDM / Shared / Independent disks ---
+            has_rdm = False
+            has_independent = False
+            has_usb = False
+            has_floppy = False
+            has_cdrom_attached = False
+            disk_count = 0
+            if hw:
+                for dev in hw.device:
+                    dtype = type(dev).__name__
+                    if "VirtualDisk" in dtype:
+                        disk_count += 1
+                        backing = dev.backing
+                        if backing:
+                            if hasattr(backing, "compatibilityMode"):
+                                has_rdm = True  # RDM disk
+                            if hasattr(backing, "diskMode") and "independent" in str(backing.diskMode).lower():
+                                has_independent = True
+                    elif "VirtualUSB" in dtype or "VirtualUSBController" in dtype:
+                        has_usb = True
+                    elif "VirtualFloppy" in dtype:
+                        has_floppy = True
+                    elif "VirtualCdrom" in dtype:
+                        back = dev.backing
+                        if hasattr(back, "fileName") and back.fileName:
+                            has_cdrom_attached = True
+                        elif hasattr(back, "deviceName") and back.deviceName:
+                            has_cdrom_attached = True
+
+            # --- 6. Secure Boot ---
+            boot_opts = cfg.bootOptions if cfg else None
+            secure_boot = bool(boot_opts.efiSecureBootEnabled) if (boot_opts and hasattr(boot_opts, "efiSecureBootEnabled")) else False
+
+            # --- 7. Guest OS type ---
+            guest_os = cfg.guestFullName if cfg else ""
+            guest_id = cfg.guestId if cfg else ""
+            is_windows = "win" in (guest_id or "").lower() or "windows" in (guest_os or "").lower()
+            is_linux   = not is_windows
+
+            # --- 8. Datastore free space (15-20% check) ---
+            ds_space_ok = True
+            ds_details  = []
+            try:
+                for ds in (vm.datastore or []):
+                    summ = ds.summary
+                    capacity  = summ.capacity  or 0
+                    free_space = summ.freeSpace or 0
+                    pct_free   = (free_space / capacity * 100) if capacity else 0
+                    ds_details.append({"name": summ.name, "pct_free": round(pct_free, 1), "free_gb": round(free_space/1024**3, 1), "total_gb": round(capacity/1024**3, 1)})
+                    if pct_free < 15:
+                        ds_space_ok = False
+            except Exception:
+                pass
+
+            # --- 9. Networks (for mapping check) ---
+            net_names = []
+            if guest and guest.net:
+                for nic in guest.net:
+                    if nic.network:
+                        net_names.append(nic.network)
+            elif hw:
+                for dev in hw.device:
+                    if hasattr(dev, "backing") and hasattr(dev.backing, "deviceName"):
+                        net_names.append(dev.backing.deviceName)
+                    elif hasattr(dev, "backing") and hasattr(dev.backing, "port"):
+                        pg = getattr(dev.backing.port, "portgroupKey", None)
+                        if pg:
+                            net_names.append(pg)
+
+            # --- 10. CPU/RAM ---
+            num_cpu = hw.numCPU       if hw else 0
+            mem_mb  = hw.memoryMB     if hw else 0
+
+            # --- Build results dict ---
+            results.append({
+                "vm_name":          vm_name,
+                "power_on":         power_on,
+                "guest_os":         guest_os,
+                "guest_id":         guest_id,
+                "is_windows":       is_windows,
+                "is_linux":         is_linux,
+                "num_cpu":          num_cpu,
+                "mem_mb":           mem_mb,
+                "disk_count":       disk_count,
+                # Checklist items
+                "tools_ok":         tools_ok,
+                "tools_status":     tools_status,
+                "tools_version":    tools_version,
+                "tools_detail":     tools_detail,
+                "snapshot_count":   snap_count,
+                "cbt_enabled":      cbt_enabled,
+                "cpu_hotadd":       cpu_hotadd,
+                "cpu_hotremove":    cpu_hotremove,
+                "mem_hotadd":       mem_hotadd,
+                "hotplug_disabled": hotplug_disabled,
+                "has_rdm":          has_rdm,
+                "has_independent":  has_independent,
+                "has_usb":          has_usb,
+                "has_floppy":       has_floppy,
+                "has_cdrom":        has_cdrom_attached,
+                "secure_boot":      secure_boot,
+                "ds_space_ok":      ds_space_ok,
+                "ds_details":       ds_details,
+                "net_names":        net_names,
+            })
+        except Exception as ex:
+            results.append({"vm_name": vm_name, "error": str(ex)})
+
+    return results
+

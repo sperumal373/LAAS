@@ -1403,7 +1403,7 @@ function CISOsGroupVMs({ osKey, onViewVM }) {
                 <tr key={i} style={{ borderBottom:"1px solid #111827" }}>
                   <td style={{ padding:"8px 10px", color:"#e2e8f0", fontWeight:600 }}>{vm.hostname}</td>
                   <td style={{ padding:"8px 10px", color:"#6b7280", fontFamily:"monospace" }}>{vm.ip_address || "-"}</td>
-                  <td style={{ padding:"8px 10px", color:"#9ca3af", maxWidth:160, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{vm.os_name || "-"}</td>
+                  <td style={{ padding:"8px 10px", color:"#a78bfa", minWidth:180, maxWidth:260, wordBreak:"break-word" }} title={vm.os_name||""}>{vm.os_name || "-"}</td>
                   <td style={{ padding:"8px 10px" }}><PwrBadge state={vm.power_state} /></td>
                   <td style={{ padding:"8px 10px" }}>
                     {vm.score != null
@@ -1514,10 +1514,40 @@ function CISOsGroupVMs({ osKey, onViewVM }) {
 
 //  OS Groups tab 
 function CISOsGroups({ onViewVM }) {
-  const [groups,  setGroups]  = useState([]);
-  const [selKey,  setSelKey]  = useState("rhel8");
-  const [scanning, setScanning] = useState(false);
-  const [scanMsg,  setScanMsg]  = useState("");
+  const [groups,    setGroups]    = useState([]);
+  const [selKey,    setSelKey]    = useState("rhel8");
+  const [scanning,  setScanning]  = useState(false);
+  const [scanMsg,   setScanMsg]   = useState("");
+  const [uploadMsg, setUploadMsg] = useState({});
+
+  const handleUpload = async (os_key, file) => {
+    if (!file) return;
+    setUploadMsg(p => ({ ...p, [os_key]: "Uploading..." }));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/cis/assets/bulk-upload?os_key=" + os_key, {
+        method: "POST", headers: { Authorization: "Bearer " + token }, body: form
+      });
+      const d = await res.json();
+      if (d.error) { setUploadMsg(p => ({ ...p, [os_key]: "Error: " + d.error })); }
+      else {
+        setUploadMsg(p => ({ ...p, [os_key]: "✓ " + d.inserted + " inserted, " + d.updated + " updated" + (d.errors > 0 ? " (" + d.errors + " errors)" : "") }));
+        API("/api/cis/os-groups").then(d => setGroups(d.os_groups || [])).catch(() => {});
+      }
+    } catch(e) { setUploadMsg(p => ({ ...p, [os_key]: "Failed: " + e })); }
+  };
+
+  const downloadTemplate = (os_key) => {
+    const token = localStorage.getItem("token");
+    fetch("/api/cis/assets/bulk-template?os_key=" + os_key, { headers: { Authorization: "Bearer " + token } })
+      .then(r => r.blob()).then(b => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(b);
+        a.download = "template_" + os_key + ".csv"; a.click();
+      });
+  };
 
   useEffect(() => {
     API("/api/cis/os-groups")
@@ -1565,9 +1595,30 @@ function CISOsGroups({ onViewVM }) {
                 onClick={e => { e.stopPropagation(); triggerScan(osk.key); }}
                 style={{ background:osk.color, color:"#fff", border:"none",
                   borderRadius:6, padding:"5px 12px", fontSize:12, cursor:"pointer",
-                  opacity:scanning?0.6:1, width:"100%" }}>
+                  opacity:scanning?0.6:1, width:"100%", marginBottom:6 }}>
                 {scanning ? "Starting..." : "Scan This OS"}
               </button>
+              <div style={{ display:"flex", gap:5 }} onClick={e => e.stopPropagation()}>
+                <label style={{ flex:1, background:"#1e3a5f", color:"#93c5fd",
+                  border:"1px solid #1d4ed8", borderRadius:6, padding:"5px 0",
+                  fontSize:11, cursor:"pointer", textAlign:"center", fontWeight:700 }}>
+                  ⬆ Upload CSV
+                  <input type="file" accept=".csv" style={{ display:"none" }}
+                    onChange={e => { if(e.target.files[0]) handleUpload(osk.key, e.target.files[0]); e.target.value=""; }} />
+                </label>
+                <button onClick={() => downloadTemplate(osk.key)}
+                  style={{ flex:1, background:"#0d2d1a", color:"#6ee7b7",
+                    border:"1px solid #065f46", borderRadius:6, padding:"5px 0",
+                    fontSize:11, cursor:"pointer", fontWeight:700 }}>
+                  ↓ Template
+                </button>
+              </div>
+              {uploadMsg[osk.key] && (
+                <div style={{ fontSize:10, marginTop:4, textAlign:"center",
+                  color: uploadMsg[osk.key].startsWith("✓") ? "#6ee7b7" : "#fca5a5" }}>
+                  {uploadMsg[osk.key]}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1589,6 +1640,119 @@ function CISOsGroups({ onViewVM }) {
 }
 
 //  Scan History tab 
+
+function CISScanReport({ jobId, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    API("/api/cis/scan/" + jobId + "/report")
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [jobId]);
+  const fmtDur = (s) => {
+    if (!s && s !== 0) return "-";
+    const sec = Math.round(Number(s));
+    if (sec < 60) return sec + "s";
+    return Math.floor(sec/60) + "m " + (sec%60) + "s";
+  };
+  const scoreColor = (s) => {
+    if (!s && s !== 0) return "#6b7280";
+    const n = Number(s);
+    return n >= 80 ? "#10b981" : n >= 60 ? "#f59e0b" : "#ef4444";
+  };
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:1000,
+      display:"flex", alignItems:"flex-start", justifyContent:"center", overflowY:"auto", padding:"40px 16px" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background:"#0d1117", border:"1px solid #1f2937", borderRadius:14,
+        width:"100%", maxWidth:920, padding:28 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div>
+            <div style={{ color:"#f9fafb", fontWeight:800, fontSize:17 }}>Scan Report - Job #{jobId}</div>
+            <div style={{ color:"#6b7280", fontSize:12, marginTop:2 }}>Reachability and results breakdown</div>
+          </div>
+          <button onClick={onClose} style={{ background:"#1f2937", border:"1px solid #374151",
+            color:"#9ca3af", borderRadius:8, padding:"6px 14px", cursor:"pointer", fontSize:13 }}>Close</button>
+        </div>
+        {loading && <div style={{ color:"#6b7280", textAlign:"center", padding:40 }}>Loading report...</div>}
+        {!loading && data && data.error && <div style={{ color:"#ef4444", padding:20 }}>Error: {data.error}</div>}
+        {!loading && data && !data.error && (() => {
+          const s = data.summary || {};
+          const job = data.job || {};
+          return (
+            <>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
+                {[
+                  { label:"Total VMs",    val: s.total||0,      color:"#e2e8f0" },
+                  { label:"Scanned",      val: s.scanned||0,    color:"#10b981" },
+                  { label:"Unreachable",  val: s.unreachable||0, color: (s.unreachable||0)>0?"#f59e0b":"#4b5563" },
+                  { label:"Auth Failed",  val: s.auth_failed||0, color: (s.auth_failed||0)>0?"#ef4444":"#4b5563" },
+                  { label:"Duration",     val: fmtDur(job.duration_sec), color:"#a78bfa" },
+                ].map(c => (
+                  <div key={c.label} style={{ background:"#111827", border:"1px solid #1f2937",
+                    borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                    <div style={{ fontSize:22, fontWeight:800, color:c.color }}>{c.val}</div>
+                    <div style={{ fontSize:10, color:"#6b7280", marginTop:4, textTransform:"uppercase", letterSpacing:"0.08em" }}>{c.label}</div>
+                  </div>
+                ))}
+              </div>
+              {(data.os_groups||[]).length > 0 && (
+                <div style={{ marginBottom:18 }}>
+                  <div style={{ color:"#9ca3af", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>By OS Group</div>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead><tr style={{ background:"#111827" }}>
+                      {["OS Name","Family","VMs","Pass","Fail","Avg Score"].map(h=>(
+                        <th key={h} style={{ padding:"6px 10px", color:"#6b7280", textAlign:"left", borderBottom:"1px solid #1f2937" }}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {data.os_groups.map((g,i)=>(
+                        <tr key={i} style={{ borderBottom:"1px solid #0d1117" }}>
+                          <td style={{ padding:"6px 10px", color:"#e2e8f0" }}>{g.os_name||"-"}</td>
+                          <td style={{ padding:"6px 10px", color:"#a78bfa" }}>{g.os_family||"-"}</td>
+                          <td style={{ padding:"6px 10px", color:"#10b981", fontWeight:700 }}>{g.vm_count}</td>
+                          <td style={{ padding:"6px 10px", color:"#10b981" }}>{g.passed||0}</td>
+                          <td style={{ padding:"6px 10px", color:"#ef4444" }}>{g.failed||0}</td>
+                          <td style={{ padding:"6px 10px", color:scoreColor(g.avg_score), fontWeight:700 }}>{g.avg_score!=null?Number(g.avg_score).toFixed(1)+"%":"-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div>
+                <div style={{ color:"#9ca3af", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Per-VM Results ({(data.vms||[]).length} scanned)</div>
+                <div style={{ maxHeight:320, overflowY:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead style={{ position:"sticky", top:0, background:"#111827", zIndex:1 }}>
+                      <tr>{["VM Name","IP","OS","Pass","Fail","Score"].map(h=>(
+                        <th key={h} style={{ padding:"6px 10px", color:"#6b7280", textAlign:"left", borderBottom:"1px solid #1f2937" }}>{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody>
+                      {(data.vms||[]).map((v,i)=>(
+                        <tr key={i} style={{ borderBottom:"1px solid #0d1117" }}>
+                          <td style={{ padding:"6px 10px", color:"#e2e8f0" }}>{v.vm_name}</td>
+                          <td style={{ padding:"6px 10px", color:"#6b7280", fontFamily:"monospace" }}>{v.ip_address||"-"}</td>
+                          <td style={{ padding:"6px 10px", color:"#a78bfa" }}>{v.os_name||"-"}</td>
+                          <td style={{ padding:"6px 10px", color:"#10b981" }}>{v.passed||0}</td>
+                          <td style={{ padding:"6px 10px", color:"#ef4444" }}>{v.failed||0}</td>
+                          <td style={{ padding:"6px 10px", color:scoreColor(v.score), fontWeight:700 }}>{v.score!=null?Number(v.score).toFixed(1)+"%":"-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
 function CISScanHistory() {
   const [data,     setData]     = useState({ jobs:[], total:0, pages:1 });
   const [page,     setPage]     = useState(1);
@@ -1596,6 +1760,7 @@ function CISScanHistory() {
   const [loading,  setLoading]  = useState(false);
   const [stopping, setStopping] = useState({});
   const [deleting, setDeleting] = useState({});
+  const [reportJobId, setReportJobId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1665,7 +1830,7 @@ function CISScanHistory() {
         <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
           <thead>
             <tr style={{ background:"#111827" }}>
-              {["#","Status","OS Filter","Started","Duration","Progress","Pass","Fail","By","Actions"].map(h => (
+              {["#","Status","OS Filter","Started","Duration","Progress","Pass","Fail","Unreachable","Auth Failed","By","Actions"].map(h => (
                 <th key={h} style={{ padding:"8px 10px", color:"#9ca3af", textAlign:"left",
                   borderBottom:"1px solid #1f2937", whiteSpace:"nowrap" }}>{h}</th>
               ))}
@@ -1698,6 +1863,16 @@ function CISScanHistory() {
                   </td>
                   <td style={{ padding:"8px 10px", color:"#10b981", fontWeight:600 }}>{j.passed_checks||0}</td>
                   <td style={{ padding:"8px 10px", color:"#ef4444", fontWeight:600 }}>{j.failed_checks||0}</td>
+                  <td style={{ padding:"8px 10px" }}>
+                    {(j.unreachable_vms||0) > 0
+                      ? <span style={{ color:"#f59e0b", fontWeight:600 }}>{j.unreachable_vms}</span>
+                      : <span style={{ color:"#374151" }}>0</span>}
+                  </td>
+                  <td style={{ padding:"8px 10px" }}>
+                    {(j.auth_failed_vms||0) > 0
+                      ? <span style={{ color:"#ef4444", fontWeight:600 }}>{j.auth_failed_vms}</span>
+                      : <span style={{ color:"#374151" }}>0</span>}
+                  </td>
                   <td style={{ padding:"8px 10px", color:"#6b7280" }}>{j.triggered_by}</td>
                   <td style={{ padding:"8px 10px" }}>
                     <div style={{ display:"flex", gap:5 }}>
@@ -1711,13 +1886,19 @@ function CISScanHistory() {
                         </button>
                       )}
                       {!isActive && (
-                        <button disabled={deleting[j.id]}
-                          onClick={() => deleteScan(j.id)}
-                          style={{ background:"#1f2937", color:"#6b7280", border:"1px solid #374151",
-                            borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer",
-                            opacity: deleting[j.id] ? 0.5 : 1 }}>
-                          {deleting[j.id] ? "" : " Delete"}
-                        </button>
+                        <div style={{ display:"flex", gap:4 }}>
+                          <button onClick={() => setReportJobId(j.id)}
+                            style={{ background:"#1e3a5f", color:"#93c5fd", border:"1px solid #1e40af",
+                              borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer" }}>
+                            Report
+                          </button>
+                          <button disabled={deleting[j.id]} onClick={() => deleteScan(j.id)}
+                            style={{ background:"#1f2937", color:"#6b7280", border:"1px solid #374151",
+                              borderRadius:5, padding:"3px 10px", fontSize:11, cursor:"pointer",
+                              opacity: deleting[j.id] ? 0.5 : 1 }}>
+                            {deleting[j.id] ? "..." : "Delete"}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </td>
@@ -1738,6 +1919,7 @@ function CISScanHistory() {
           </div>
         )}
       </div>
+      {reportJobId && <CISScanReport jobId={reportJobId} onClose={() => setReportJobId(null)} />}
     </div>
   );
 }
@@ -1977,7 +2159,8 @@ export default function CISHardening({ currentUser }) {
         {tab === "osgroups"    && <CISOsGroups onViewVM={handleViewVM} />}
         {tab === "vmlist"      && <CISVMList onSelectVM={handleViewVM} />}
         {tab === "scanhistory" && <CISScanHistory />}
-        {tab === "baselines"   && <CISBaselines />}
+        {tab === "baselines"   && <CISBaselines />}
+
         {tab === "vmdetail"   && selVM && <CISVMDetail vm={selVM} onBack={handleBack} />}
         {tab === "exclusions" && <CISExclusions />}
         {tab === "remlog"     && <CISRemLog />}

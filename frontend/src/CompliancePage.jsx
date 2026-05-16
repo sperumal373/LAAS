@@ -1497,7 +1497,6 @@ export default function CompliancePage({ currentUser, p }) {
   const TABS = [
     { id: "dashboard",    label: "Dashboard",     icon: "🛡️" },
     { id: "cis",         label: "CIS Hardening", icon: "🔒" },
-    { id: "config",      label: "Scan Config",   icon: "⚙️" },
     { id: "assets",      label: "Assets",        icon: "🖥️" },
     { id: "reports",     label: "Reports",       icon: "📊" },
   ];
@@ -1541,9 +1540,8 @@ export default function CompliancePage({ currentUser, p }) {
         ))}
       </div>
 
-      {tab === "dashboard"    && <ComplianceDashboard p={p} onDrillDown={handleDrillDown} onGoScanConfig={() => setTab("config")} />}
+      {tab === "dashboard"    && <ComplianceDashboard p={p} onDrillDown={handleDrillDown} onGoScanConfig={() => setTab("cis")} />}
       {tab === "cis"         && <CISHardeningLazy currentUser={currentUser} />}
-      {tab === "config"      && <ScanConfig p={p} onScanStarted={() => setTimeout(() => setTab("dashboard"), 1000)} />}
       {tab === "assets"      && <ComplianceAssets p={p} initialStatus={drillStatus} currentUser={currentUser} />}
       {tab === "reports"     && <ReportPage p={p} />}
     </div>

@@ -291,7 +291,12 @@ def _api_get(cluster: dict, path: str, params: dict = None) -> dict:
     r = requests.get(url, headers={"Authorization": f"Bearer {token}"},
                      params=params or {}, verify=False, timeout=30)
     r.raise_for_status()
-    return r.json()
+    if not r.content or not r.text.strip():
+        return {}
+    try:
+        return r.json()
+    except Exception:
+        raise RuntimeError(f"Non-JSON response from {path}: HTTP {r.status_code} -- {r.text[:200]}")
 
 def _api_delete(cluster: dict, path: str) -> dict:
     token = _get_token(cluster)
@@ -312,7 +317,12 @@ def _api_post(cluster: dict, path: str, body: dict) -> dict:
                                     "Content-Type": "application/json"},
                       data=_json.dumps(body), verify=False, timeout=30)
     r.raise_for_status()
-    return r.json()
+    if not r.content or not r.text.strip():
+        return {"status": r.status_code, "created": True}
+    try:
+        return r.json()
+    except Exception:
+        return {"status": r.status_code, "created": True, "raw": r.text[:200]}
 
 #  Live data 
 def _parse_cpu(cpu_str: str) -> float:

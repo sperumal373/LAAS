@@ -779,6 +779,7 @@ export async function restoreHVCheckpoint(host_id, vm_name, name){ return _post(
 export async function fetchHPEVMEHosts()              { return _get("/api/hpevme/hosts"); }
 export async function saveHPEVMEHosts(hosts)          { return _post("/api/hpevme/hosts", { hosts }); }
 export async function fetchHPEVMEStatus()             { return _get("/api/hpevme/status"); }
+export async function fetchHPEVMEClusters(host_id)    { const d = await _get(`/api/hpevme/clusters${host_id ? "?host_id=" + encodeURIComponent(host_id) : ""}`); return d.clusters || []; }
 export async function fetchHPEVMEVMs(host_id)         { return _get(`/api/hpevme/vms${host_id ? "?host_id=" + encodeURIComponent(host_id) : ""}`); }
 
 // â”€â”€ LaaS AI â€” OpenAI Natural Language Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -844,6 +845,7 @@ export async function updatePlanStatus(id, body)    { return _patch(`/api/migrat
 export async function executeMigrationPlan(id)     { return _post(`/api/migration/plans/${id}/execute`, {}); }
 export async function fetchPlanEvents(id)          { return _get(`/api/migration/plans/${id}/events`); }
 export async function runPreflightCheck(body)        { return _post("/api/migration/preflight", body); }
+export async function runPreflightLive(body)         { return _post("/api/migration/preflight/live", body); }
 // ---- Move Groups ----
 export async function fetchMoveGroups()              { return _get("/api/migration/move-groups"); }
 export async function createMoveGroup(name, desc)     { return _post("/api/migration/move-groups", {name, description: desc || ""}); }
@@ -885,3 +887,5 @@ export const fetchZertoPeerSites = (siteId) => _get(`/api/zerto/sites/${siteId}/
 export const fetchZertoTask = (siteId, taskId) => _get(`/api/zerto/sites/${siteId}/tasks/${taskId}`);
 export const fetchZertoVirtSites = (siteId) => _get(`/api/zerto/sites/${siteId}/virtualizationsites`);
 export const fetchZertoVirtSiteVMs = (siteId, vsId) => _get(`/api/zerto/sites/${siteId}/virtualizationsites/${vsId}/vms`);
+
+

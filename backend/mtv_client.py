@@ -9,6 +9,19 @@ import re
 import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+def _safe_json(r, label=""):
+    """Parse JSON safely from a requests Response. HTTP 206 = paginated, still valid."""
+    if not r.content or not r.text.strip():
+        # 206 with empty body = out-of-range page, return empty list/dict
+        if r.status_code == 206:
+            return []
+        raise RuntimeError(f"Empty response from Forklift inventory ({label}): HTTP {r.status_code}")
+    try:
+        return r.json()
+    except Exception:
+        raise RuntimeError(f"Non-JSON response from Forklift ({label}): HTTP {r.status_code} -- {r.text[:300]}")
+
+
 
 log = logging.getLogger("mtv_client")
 
@@ -59,7 +72,7 @@ def _api_patch(cluster, path, body):
                  "Content-Type": "application/merge-patch+json"},
         data=json.dumps(body), verify=False, timeout=30)
     r.raise_for_status()
-    return r.json()
+    return _safe_json(r, "inventory")
 
 
 def _inventory_url(cluster):
@@ -106,7 +119,7 @@ def resolve_provider_uid(cluster, provider_name):
     headers = _inv_headers(cluster)
     r = requests.get(f"{inv}/providers/vsphere", headers=headers, verify=False, timeout=15)
     r.raise_for_status()
-    for p in r.json():
+    for p in _safe_json(r, "inventory"):
         if p.get("name") == provider_name:
             return p["uid"]
     raise ValueError(f"Provider {provider_name} not found in inventory")
@@ -115,21 +128,62 @@ def resolve_provider_uid(cluster, provider_name):
 # ---- Inventory lookups ----
 
 def lookup_vm_ids(cluster, provider_name, vm_names):
-    """Resolve VM names to Forklift vm-XXXX IDs via inventory."""
+    """Resolve VM names to Forklift vm-XXXX IDs via inventory (handles HTTP 206 pagination)."""
     inv = _inventory_url(cluster)
     headers = _inv_headers(cluster)
     uid = resolve_provider_uid(cluster, provider_name)
-    r = requests.get(f"{inv}/providers/vsphere/{uid}/vms", headers=headers, verify=False, timeout=60)
-    r.raise_for_status()
-    all_vms = r.json()
-    name_map = {v["name"].lower(): v for v in all_vms}
+    # Forklift inventory paginates with Range header; fetch in pages of 200
+    all_vms = []
+    page_size = 200
+    start = 0
+    while True:
+        paged_headers = {**headers, "Range": f"vms={start}-{start+page_size-1}"}
+        r = requests.get(f"{inv}/providers/vsphere/{uid}/vms",
+                         headers=paged_headers, verify=False, timeout=60)
+        if r.status_code == 416:  # Range Not Satisfiable = no more pages
+            break
+        page = _safe_json(r, f"vms page {start}-{start+page_size-1}")
+        if not page:
+            break
+        if isinstance(page, list):
+            all_vms.extend(page)
+        else:
+            # Non-paginated response (small inventories return 200 with full list)
+            all_vms = list(page.values()) if isinstance(page, dict) else all_vms
+            break
+        if r.status_code == 200 or len(page) < page_size:
+            # Got everything in one shot or last page
+            break
+        start += page_size
+    log.info(f"Forklift inventory: fetched {len(all_vms)} VMs from provider {provider_name}")
+    # Log all available VM names for debugging
+    available = [v.get("name","") for v in all_vms if isinstance(v, dict)]
+    log.info(f"Available VMs in inventory ({len(available)}): {available[:50]}")
+
+    # Build multiple lookup maps: exact lower, stripped, and partial match
+    name_map = {}
+    for v in all_vms:
+        if not isinstance(v, dict):
+            continue
+        n = v.get("name", "")
+        name_map[n.lower()] = v              # exact lowercase
+        name_map[n.lower().strip()] = v      # stripped
+
     results = []
     for vn in vm_names:
-        found = name_map.get(vn.lower())
+        vn_l = vn.lower().strip()
+        found = name_map.get(vn_l)
+        if not found:
+            # Partial/substring match fallback
+            for k, v in name_map.items():
+                if vn_l in k or k in vn_l:
+                    found = v
+                    log.info(f"VM '{vn}' matched via substring to '{v.get("name","")}' in provider {provider_name}")
+                    break
         if found:
             results.append({"id": found["id"], "name": found["name"]})
         else:
-            log.warning(f"VM '{vn}' not found in provider {provider_name}")
+            log.warning(f"VM '{vn}' NOT found in provider {provider_name}. Available: {available[:20]}")
     return results
 
 
@@ -140,7 +194,7 @@ def lookup_networks(cluster, provider_name):
     uid = resolve_provider_uid(cluster, provider_name)
     r = requests.get(f"{inv}/providers/vsphere/{uid}/networks", headers=headers, verify=False, timeout=15)
     r.raise_for_status()
-    return r.json()
+    return _safe_json(r, "inventory")
 
 
 def lookup_datastores(cluster, provider_name):
@@ -150,7 +204,7 @@ def lookup_datastores(cluster, provider_name):
     uid = resolve_provider_uid(cluster, provider_name)
     r = requests.get(f"{inv}/providers/vsphere/{uid}/datastores", headers=headers, verify=False, timeout=15)
     r.raise_for_status()
-    return r.json()
+    return _safe_json(r, "inventory")
 
 
 def lookup_ocp_storage_classes(cluster):
@@ -159,12 +213,12 @@ def lookup_ocp_storage_classes(cluster):
     headers = _inv_headers(cluster)
     r = requests.get(f"{inv}/providers/openshift", headers=headers, verify=False, timeout=15)
     r.raise_for_status()
-    for p in r.json():
+    for p in _safe_json(r, "inventory"):
         if p.get("name") == "host":
             uid = p["uid"]
             r2 = requests.get(f"{inv}/providers/openshift/{uid}/storageclasses", headers=headers, verify=False, timeout=15)
             r2.raise_for_status()
-            return r2.json()
+            return _safe_json(r2, "inventory")
     return []
 
 
@@ -174,12 +228,12 @@ def lookup_ocp_nads(cluster):
     headers = _inv_headers(cluster)
     r = requests.get(f"{inv}/providers/openshift", headers=headers, verify=False, timeout=15)
     r.raise_for_status()
-    for p in r.json():
+    for p in _safe_json(r, "inventory"):
         if p.get("name") == "host":
             uid = p["uid"]
             r2 = requests.get(f"{inv}/providers/openshift/{uid}/networkattachmentdefinitions", headers=headers, verify=False, timeout=15)
             r2.raise_for_status()
-            return r2.json()
+            return _safe_json(r2, "inventory")
     return []
 
 
@@ -428,7 +482,7 @@ def discover_vm_resources(cluster, provider_name, vm_ids):
         try:
             r = requests.get(f"{inv}/providers/vsphere/{uid}/vms/{vm['id']}", headers=headers, verify=False, timeout=15)
             r.raise_for_status()
-            vd = r.json()
+            vd = _safe_json(r, "vm-detail")
             for net in vd.get("networks", []):
                 networks.add(net.get("id", ""))
             for disk in vd.get("disks", []):
@@ -456,7 +510,7 @@ def discover_vm_resources(cluster, provider_name, vm_ids):
         try:
             r = requests.get(f"{inv}/providers/vsphere/{uid}/vms/{vm['id']}", headers=headers, verify=False, timeout=15)
             r.raise_for_status()
-            vd = r.json()
+            vd = _safe_json(r, "vm-detail")
             for net in vd.get("networks", []):
                 networks.add(net.get("id", ""))
             for disk in vd.get("disks", []):
@@ -484,7 +538,7 @@ def discover_vm_resources(cluster, provider_name, vm_ids):
         try:
             r = requests.get(f"{inv}/providers/vsphere/{uid}/vms/{vm['id']}", headers=headers, verify=False, timeout=15)
             r.raise_for_status()
-            vd = r.json()
+            vd = _safe_json(r, "vm-detail")
             for net in vd.get("networks", []):
                 networks.add(net.get("id", ""))
             for disk in vd.get("disks", []):

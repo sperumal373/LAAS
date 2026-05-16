@@ -339,41 +339,145 @@ function VMSnapshotModal({ vm, pcId, onClose, onDone, p }) {
 }
 
 // ── Tab: Overview ─────────────────────────────────────────────────────
-function TabOverview({ overview, p }) {
-  if (!overview) return <div style={{ padding: 40, textAlign: "center", color: p.textMute, fontSize: 13 }}>Click Refresh to load overview.</div>;
-  if (overview.error) return <ErrState msg={overview.error} onRetry={() => {}} />;
-
-  const kpis = [
-    { icon: "🟦", label: "Clusters",        val: overview.clusters,               sub: "managed by PC",       color: "#024DA1" },
-    { icon: "💻", label: "Virtual Machines", val: overview.vms?.total || 0,        sub: `${overview.vms?.running || 0} running · ${overview.vms?.off || 0} off`, color: overview.vms?.running > 0 ? "#10b981" : "#64748b" },
-    { icon: "🖥️", label: "Hosts (Nodes)",    val: overview.hosts,                  sub: `${overview.total_vcpus || 0} total vCPUs`, color: "#06b6d4" },
-    { icon: "💾", label: "Total Memory",     val: `${overview.total_memory_gib || 0} GiB`, sub: "across all hosts",  color: "#a855f7" },
-    { icon: "🔴", label: "Critical Alerts", val: overview.alerts?.critical || 0,  sub: `${overview.alerts?.warning || 0} warnings`, color: overview.alerts?.critical > 0 ? "#ef4444" : "#10b981" },
-    { icon: "📊", label: "Total Alerts",    val: overview.alerts?.total || 0,     sub: "unresolved",           color: overview.alerts?.total > 0 ? "#f59e0b" : "#10b981" },
+function TabOverview({ overview, p, onNavigate, networks, storage, clusters, vms, hosts, alerts }) {
+  const [tick, setTick] = useState(60);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => (t <= 1 ? 60 : t - 1)), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const vmTotal    = overview?.vms?.total    ?? vms.length    ?? 0;
+  const vmRunning  = overview?.vms?.running  ?? 0;
+  const vmOff      = overview?.vms?.off      ?? 0;
+  const clusterCnt = overview?.clusters      ?? clusters.length ?? 0;
+  const hostCnt    = overview?.hosts         ?? hosts.length   ?? 0;
+  const storageCnt = storage?.length  ?? 0;
+  const netCnt     = networks?.length ?? 0;
+  const alertCrit  = overview?.alerts?.critical ?? 0;
+  const alertWarn  = overview?.alerts?.warning  ?? 0;
+  const alertTotal = overview?.alerts?.total    ?? alerts?.length ?? 0;
+  const memGib     = overview?.total_memory_gib ?? 0;
+  const vcpus      = overview?.total_vcpus      ?? 0;
+  const cpuPct     = overview?.cpu_usage_pct    ?? null;
+  const memPct     = overview?.mem_usage_pct    ?? null;
+  const stoPct     = overview?.storage_usage_pct ?? null;
+  const SVG_CLUSTER = "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5";
+  const SVG_VM      = "M9 17H7m10 0h-2M9 11h6m-6 4h6M5 3v18h14V7l-4-4H5z";
+  const SVG_HOST    = "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-9 4h.01";
+  const SVG_STORAGE = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4";
+  const SVG_SUBNET  = "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4";
+  const SVG_ALERT   = "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z";
+  const SVG_MEMORY  = "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2z";
+  const SVG_PRISM   = "M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z";
+  const tiles = [
+    { id: "clusters", label: "Nutanix Clusters",   val: clusterCnt, sub: "AHV / ESXi managed",           bg: "#f59e0b", svg: SVG_CLUSTER },
+    { id: "networks", label: "Nutanix Subnets",    val: netCnt,     sub: "VLANs / subnets configured",   bg: "#ef4444", svg: SVG_SUBNET  },
+    { id: "vms",      label: "Nutanix VMs",        val: vmTotal,    sub: vmRunning+" running · "+vmOff+" off", bg: "#3b82f6", svg: SVG_VM      },
+    { id: "clusters", label: "Prism Instance",     val: 1,          sub: "instance connected",            bg: "#f97316", svg: SVG_PRISM   },
+    { id: "hosts",    label: "Nutanix Hosts",      val: hostCnt,    sub: vcpus+" total vCPUs",            bg: "#06b6d4", svg: SVG_HOST    },
+    { id: "storage",  label: "Storage Containers", val: storageCnt, sub: "NFS / iSCSI pools",             bg: "#10b981", svg: SVG_STORAGE },
+    { id: "alerts",   label: "Critical Alerts",    val: alertCrit,  sub: alertWarn+" warnings·"+alertTotal+" total", bg: alertCrit>0?"#dc2626":"#8b5cf6", svg: SVG_ALERT   },
+    { id: "hosts",    label: "Total Memory",       val: memGib+" GiB", sub: "across all nodes",         bg: "#0ea5e9", svg: SVG_MEMORY  },
   ];
-
   return (
-    <div className="g-gap">
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
-        {kpis.map((k, i) => (
-          <div key={i} className="card" style={{ padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <span style={{ fontSize: 22 }}>{k.icon}</span>
-              <span style={{ fontSize: 12, color: p.textMute, fontWeight: 600 }}>{k.label}</span>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: p.text }}>
+          Nutanix Dashboard
+          <span style={{ fontSize: 11, fontWeight: 400, color: p.textMute, marginLeft: 10 }}>
+            Real-time inventory from Prism Central
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: p.textMute }}>
+          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981",
+                        boxShadow: "0 0 6px #10b98180", animation: "ntxpulse 2s infinite" }} />
+          Auto-refresh in {tick}s
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(195px, 1fr))", gap: 14 }}>
+        {tiles.map((tile, i) => (
+          <div key={i} onClick={() => onNavigate(tile.id)}
+            style={{ position: "relative", overflow: "hidden", borderRadius: 12, cursor: "pointer",
+                     background: tile.bg, boxShadow: "0 4px 18px rgba(0,0,0,0.38)",
+                     transition: "transform .15s, box-shadow .15s", minHeight: 134,
+                     display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.55)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 18px rgba(0,0,0,0.38)"; }}
+          >
+            <div style={{ position: "absolute", right: 12, top: 8, opacity: 0.18, pointerEvents: "none", userSelect: "none" }}><svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d={tile.svg} /></svg></div>
+            <div style={{ padding: "16px 18px 0" }}>
+              <div style={{ fontSize: 40, fontWeight: 800, color: "#fff", lineHeight: 1.1, textShadow: "0 2px 8px rgba(0,0,0,0.35)" }}>{tile.val}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.93)", marginTop: 6 }}>{tile.label}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.60)", marginTop: 3 }}>{tile.sub}</div>
             </div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
-            <div style={{ fontSize: 11, color: p.textMute, marginTop: 5 }}>{k.sub}</div>
+            <div style={{ padding: "8px 18px", borderTop: "1px solid rgba(255,255,255,0.18)", fontSize: 11, fontWeight: 600,
+                          color: "rgba(255,255,255,0.85)", display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.18)" }}>
+              More Info <span style={{ fontSize: 14 }}>\u2192</span>
+            </div>
           </div>
         ))}
       </div>
-      <div style={{ padding: "12px 16px", borderRadius: 10, background: `#024DA110`,
-                    border: `1px solid #024DA130`, fontSize: 12, color: "#4a90d9" }}>
-        💡 Click a tab above to fetch live data from Prism Central API.
-        Data is fetched on demand to avoid unnecessary API calls.
-      </div>
+      {(cpuPct !== null || memPct !== null || stoPct !== null) && (
+        <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, padding: "18px 22px" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: p.text, marginBottom: 14 }}>Cluster Resource Utilization</div>
+          {[{label:"CPU",pct:cpuPct,color:"#3b82f6"},{label:"Memory",pct:memPct,color:"#a855f7"},{label:"Storage",pct:stoPct,color:"#f59e0b"}]
+            .map((r,i) => r.pct !== null && (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:p.textMute, marginBottom:4 }}>
+                  <span>{r.label}</span>
+                  <span style={{ color:r.pct>85?"#ef4444":r.pct>65?"#f59e0b":"#10b981", fontWeight:700 }}>{r.pct}%</span>
+                </div>
+                <div style={{ height:8, borderRadius:4, background:"rgba(255,255,255,0.08)", overflow:"hidden" }}>
+                  <div style={{ width:Math.min(100,r.pct)+"%", height:"100%", borderRadius:4,
+                                background:r.pct>85?"#ef4444":r.pct>65?"#f59e0b":r.color, transition:"width 0.6s ease" }} />
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+      {vmTotal > 0 && (
+        <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 12, padding: "18px 22px" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: p.text, marginBottom: 14 }}>VM Power State</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {[
+              { label: "Running",     val: vmRunning,                                color: "#10b981", bg: "#10b98118" },
+              { label: "Powered Off", val: vmOff,                                    color: "#ef4444", bg: "#ef444418" },
+              { label: "Other",       val: Math.max(0, vmTotal - vmRunning - vmOff), color: "#f59e0b", bg: "#f59e0b18" },
+            ].map((s,i) => (
+              <div key={i} onClick={() => onNavigate("vms")}
+                style={{ flex:"1 1 110px", padding:"12px 16px", borderRadius:10, background:s.bg, border:"1px solid "+s.color+"30", cursor:"pointer", textAlign:"center" }}>
+                <div style={{ fontSize:28, fontWeight:800, color:s.color }}>{s.val}</div>
+                <div style={{ fontSize:11, color:p.textMute, marginTop:3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {alertTotal > 0 && (
+        <div style={{ background:alertCrit>0?"rgba(239,68,68,0.08)":"rgba(245,158,11,0.08)",
+                      border:"1px solid "+(alertCrit>0?"#ef444430":"#f59e0b30"),
+                      borderRadius:12, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+          <span style={{ fontSize:26 }}>{alertCrit > 0 ? "\uD83D\uDD34" : "\u26A0\uFE0F"}</span>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:alertCrit>0?"#ef4444":"#f59e0b" }}>
+              {alertCrit>0 ? alertCrit+" Critical Alert"+(alertCrit>1?"s":"")+" require attention" : alertWarn+" Warning"+(alertWarn>1?"s":"")+" detected"}
+            </div>
+            <div style={{ fontSize:11, color:p.textMute, marginTop:2 }}>
+              {alertTotal} total unresolved \u2014{" "}
+              <span onClick={() => onNavigate("alerts")} style={{ color:"#58a6ff", cursor:"pointer", textDecoration:"underline" }}>View all alerts \u2192</span>
+            </div>
+          </div>
+        </div>
+      )}
+      {!overview && (
+        <div style={{ padding:"14px 18px", borderRadius:10, background:"#024DA110", border:"1px solid #024DA130", fontSize:12, color:"#4a90d9" }}>
+          \uD83D\uDCA1 Click Refresh to load live data from Prism Central. Click any tile to drill into that section.
+        </div>
+      )}
+      <style>{"@keyframes ntxpulse{0%,100%{opacity:1}50%{opacity:0.4}}"}</style>
     </div>
   );
 }
+
 
 // ── Tab: Clusters ─────────────────────────────────────────────────────
 function TabClusters({ clusters, p }) {
@@ -1685,7 +1789,7 @@ function NutanixPage({ currentUser, p }) {
           {/* Tab content */}
           {!tabLoading && tab !== "request" && (
             <div>
-              {tab === "overview" && <TabOverview overview={overview} p={p} />}
+              {tab === "overview" && <TabOverview overview={overview} p={p} onNavigate={setTab} networks={networks} storage={storage} clusters={clusters} vms={vms} hosts={hosts} alerts={alerts} />}
               {tab === "clusters" && <TabClusters clusters={clusters} p={p} />}
               {tab === "vms"      && <TabVMs vms={vms} pcId={selPC.id} canAct={canAct} p={p} />}
               {tab === "hosts"    && <TabHosts hosts={hosts} p={p} />}
