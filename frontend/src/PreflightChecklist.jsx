@@ -252,14 +252,15 @@ function Modal({ checkId, vm, mode, checklist, onClose }) {
 }
 
 /* ── per-VM card ─────────────────────────────────────────── */
-function VMCard({ vm, mode, checklist, p, defaultOpen }) {
+function VMCard({ vmIdx, vm, mode, checklist, p, defaultOpen, isExcluded, toggleExclude }) {
   const [open,  setOpen]  = useState(defaultOpen);
   const [modal, setModal] = useState(null);
 
-  const sf = vm.score_fail  || 0;
-  const sw = vm.score_warn  || 0;
-  const sp = vm.score_pass  || 0;
-  const st = vm.score_total || 0;
+  const sf   = vm.score_fail  || 0;
+  const sw   = vm.score_warn  || 0;
+  const sp   = vm.score_pass  || 0;
+  const st   = vm.score_total || 0;
+  const sexc = vm.score_excl  || 0;
 
   const borderLeft = sf > 0 ? "3px solid #ef4444" : sw > 0 ? "3px solid #f59e0b" : "3px solid #22c55e";
   const headerBg   = sf > 0 ? "#dc262610" : sw > 0 ? "#d9770610" : "#16a34a10";
@@ -320,6 +321,7 @@ function VMCard({ vm, mode, checklist, p, defaultOpen }) {
                 <th style={{ ...TH, minWidth: 110 }}>Category</th>
                 <th style={{ ...TH, minWidth: 82 }}>Cold</th>
                 <th style={{ ...TH, minWidth: 82 }}>Warm</th>
+                <th style={{ ...TH, minWidth: 90, color: "#6b7280" }}>Exclude</th>
                 <th style={{ ...TH, minWidth: 130, color: "#e2e8f0" }}>Result ({mode === "warm" ? "Warm" : "Cold"})</th>
               </tr>
             </thead>
@@ -327,19 +329,36 @@ function VMCard({ vm, mode, checklist, p, defaultOpen }) {
               {checklist.map((cl, ri) => {
                 const chk    = vm.checks?.[cl.id] || {};
                 const status = chk[mode] || "na";
+                const excl   = isExcluded(vmIdx, cl.id);
                 return (
-                  <tr key={cl.id} style={{ background: ri % 2 === 0 ? "transparent" : "#0d111740" }}>
-                    <td style={{ ...TD, textAlign: "left", fontWeight: 600, color: "#d1d5db", paddingLeft: 18 }}>
+                  <tr key={cl.id} style={{ background: ri % 2 === 0 ? "transparent" : "#0d111740", opacity: excl ? 0.45 : 1, transition: "opacity .2s" }}>
+                    <td style={{ ...TD, textAlign: "left", fontWeight: 600, color: excl ? "#4b5563" : "#d1d5db", paddingLeft: 18, textDecoration: excl ? "line-through" : "none" }}>
                       {cl.label}
                     </td>
                     <td style={TD}><CatBadge cat={cl.category} /></td>
                     <td style={TD}><ReqBadge req={cl.cold} /></td>
                     <td style={TD}><ReqBadge req={cl.warm} /></td>
                     <td style={TD}>
-                      <ResultBadge
-                        status={status}
-                        onClick={(status === "fail" || status === "warn") ? () => setModal(cl.id) : null}
-                      />
+                      {(status === "fail" || status === "warn" || isExcluded(vmIdx, cl.id)) ? (
+                        <button
+                          onClick={() => toggleExclude(vmIdx, cl.id)}
+                          title={isExcluded(vmIdx, cl.id) ? "Click to re-include this check" : "Click to exclude this check from blocking"}
+                          style={{
+                            fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 20, cursor: "pointer",
+                            border: "1px solid " + (isExcluded(vmIdx, cl.id) ? "#4b5563" : "#6b7280"),
+                            background: isExcluded(vmIdx, cl.id) ? "#37415130" : "transparent",
+                            color: isExcluded(vmIdx, cl.id) ? "#9ca3af" : "#6b7280",
+                            transition: "all .15s",
+                          }}
+                        >
+                          {isExcluded(vmIdx, cl.id) ? "+ Include" : "- Exclude"}
+                        </button>
+                      ) : <span style={{ color: "#2d3748", fontSize: 11 }}>—</span>}
+                    </td>
+                    <td style={{ ...TD, opacity: isExcluded(vmIdx, cl.id) ? 0.35 : 1 }}>
+                      {isExcluded(vmIdx, cl.id)
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: "#4b5563", background: "#37415120", border: "1px solid #4b556340", borderRadius: 20, padding: "3px 10px", textDecoration: "line-through" }}>EXCL</span>
+                        : <ResultBadge status={status} onClick={(status === "fail" || status === "warn") ? () => setModal(cl.id) : null} />}
                     </td>
                   </tr>
                 );
@@ -357,9 +376,11 @@ function VMCard({ vm, mode, checklist, p, defaultOpen }) {
    MAIN EXPORT
 ═══════════════════════════════════════════════════════════ */
 export default function PreflightChecklist({ selectedVMList, targetPlatform, migWarm, targetDetail, p, onBack, onContinue }) {
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState([]);
-  const [error,   setError]   = useState(null);
+  const [loading,  setLoading]  = useState(false);
+  const [results,  setResults]  = useState([]);
+  const [error,    setError]    = useState(null);
+  // excluded: { "vmIdx:checkId": true } — per-VM per-check exclusions
+  const [excluded, setExcluded] = useState({});
 
   const meta      = PLATFORM_META[targetPlatform];
   const checklist = meta?.checklist || CHECKLIST_OCP;
@@ -367,10 +388,17 @@ export default function PreflightChecklist({ selectedVMList, targetPlatform, mig
   const vcenter_id = selectedVMList?.[0]?.vcenter_id || selectedVMList?.[0]?.vcenter || "";
   const vm_names   = (selectedVMList || []).map(v => v.name);
 
+  const toggleExclude = (vmIdx, checkId) => {
+    const key = `${vmIdx}:${checkId}`;
+    setExcluded(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+  const isExcluded = (vmIdx, checkId) => !!excluded[`${vmIdx}:${checkId}`];
+
   const runChecks = useCallback(() => {
     if (!vcenter_id || !vm_names.length) return;
     setLoading(true);
     setError(null);
+    setExcluded({});  // reset exclusions on re-run
     _post("/api/migration/preflight/live", { vcenter_id, vm_names, warm: migWarm, target_platform: targetPlatform })
       .then(r => setResults(r.results || []))
       .catch(e => setError(e?.message || "Pre-flight check failed"))
@@ -399,24 +427,26 @@ export default function PreflightChecklist({ selectedVMList, targetPlatform, mig
     </div>
   );
 
-  /* compute platform-scoped scores (ignore checks not in this platform's checklist) */
-  function platformScore(vm) {
-    if (vm.error) return { sp: 0, sf: 0, sw: 0, st: 0 };
-    let sp = 0, sf = 0, sw = 0, st = 0;
+  /* compute platform-scoped scores — skips excluded checks */
+  function platformScore(vm, vmIdx) {
+    if (vm.error) return { sp: 0, sf: 0, sw: 0, st: 0, excl: 0 };
+    let sp = 0, sf = 0, sw = 0, st = 0, excl = 0;
     checklist.forEach(cl => {
       const status = vm.checks?.[cl.id]?.[mode] || "na";
       if (status === "na") return;
+      if (isExcluded(vmIdx, cl.id)) { excl++; return; }
       st++;
       if (status === "pass") sp++;
       else if (status === "fail") sf++;
       else if (status === "warn") sw++;
     });
-    return { sp, sf, sw, st };
+    return { sp, sf, sw, st, excl };
   }
 
-  const gPass    = results.reduce((s, r) => s + platformScore(r).sp, 0);
-  const gFail    = results.reduce((s, r) => s + platformScore(r).sf, 0);
-  const gWarn    = results.reduce((s, r) => s + platformScore(r).sw, 0);
+  const gPass    = results.reduce((s, r, i) => s + platformScore(r, i).sp, 0);
+  const gFail    = results.reduce((s, r, i) => s + platformScore(r, i).sf, 0);
+  const gWarn    = results.reduce((s, r, i) => s + platformScore(r, i).sw, 0);
+  const gExcl    = results.reduce((s, r, i) => s + platformScore(r, i).excl, 0);
   const blocking = gFail > 0;
 
   function downloadReport() {
@@ -424,16 +454,17 @@ export default function PreflightChecklist({ selectedVMList, targetPlatform, mig
     let txt = title + " Pre-flight Report\n";
     txt += "Generated: " + new Date().toLocaleString() + "\n";
     txt += "Mode: " + mode.toUpperCase() + " | VMs: " + results.length + "\n\n";
-    results.forEach(vm => {
-      const sc = platformScore(vm);
+    results.forEach((vm, vi) => {
+      const sc = platformScore(vm, vi);
       txt += "VM: " + vm.vm_name + "\n  OS: " + (vm.guest_os || "Unknown") + " | Power: " + (vm.power_on ? "ON" : "OFF") + "\n";
       if (vm.error) { txt += "  ERROR: " + vm.error + "\n"; }
       else {
         txt += "  Score: " + sc.sp + "/" + sc.st + " (Fail:" + sc.sf + " Warn:" + sc.sw + ")\n";
         checklist.forEach(cl => {
           const st2 = vm.checks?.[cl.id]?.[mode] || "na";
-          txt += "  [" + (st2 === "pass" ? "PASS" : st2 === "fail" ? "FAIL" : st2 === "warn" ? "WARN" : "N/A ") + "] " + cl.label + "\n";
-          if (st2 !== "pass" && st2 !== "na" && vm.checks?.[cl.id]?.detail)
+          const excTag = isExcluded(vi, cl.id) ? " [EXCLUDED]" : "";
+          txt += "  [" + (st2 === "pass" ? "PASS" : st2 === "fail" ? "FAIL" : st2 === "warn" ? "WARN" : "N/A ") + excTag + "] " + cl.label + "\n";
+          if (st2 !== "pass" && st2 !== "na" && vm.checks?.[cl.id]?.detail && !isExcluded(vi, cl.id))
             txt += "       " + vm.checks[cl.id].detail + "\n";
         });
       }
@@ -535,6 +566,7 @@ export default function PreflightChecklist({ selectedVMList, targetPlatform, mig
             { label: "PASSED",   val: gPass, col: "#22c55e", bg: "#16a34a20", bd: "#22c55e40" },
             { label: "FAILED",   val: gFail, col: "#ef4444", bg: "#dc262620", bd: "#ef444440" },
             { label: "WARNINGS", val: gWarn, col: "#f59e0b", bg: "#d9770620", bd: "#f59e0b40" },
+            { label: "EXCLUDED", val: gExcl, col: "#6b7280", bg: "#37415120", bd: "#4b556340" },
           ].map(s => (
             <div key={s.label} style={{
               flex: "0 0 120px", display: "flex", flexDirection: "column", alignItems: "center",
@@ -558,9 +590,9 @@ export default function PreflightChecklist({ selectedVMList, targetPlatform, mig
             <span style={{ color: "#9ca3af", marginLeft: 10, fontSize: 12 }}>Error: {vm.error}</span>
           </div>
         );
-        const sc = platformScore(vm);
-        const vmS = { ...vm, score_pass: sc.sp, score_fail: sc.sf, score_warn: sc.sw, score_total: sc.st };
-        return <VMCard key={i} vm={vmS} mode={mode} checklist={checklist} p={p} defaultOpen={results.length === 1} />;
+        const sc = platformScore(vm, i);
+        const vmS = { ...vm, score_pass: sc.sp, score_fail: sc.sf, score_warn: sc.sw, score_total: sc.st, score_excl: sc.excl };
+        return <VMCard key={i} vmIdx={i} vm={vmS} mode={mode} checklist={checklist} p={p} defaultOpen={results.length === 1} isExcluded={isExcluded} toggleExclude={toggleExclude} />;
       })}
 
       {/* ── bottom nav ── */}
