@@ -3497,11 +3497,11 @@ export default function MigrationPage({ currentUser, p }) {
 
                                           const ico = done ? "✓" : run ? "⏳" : fail ? "✗" : "○";
 
-                                          const pct = info.total > 0 ? Math.round(info.completed / info.total * 100) : null;
-
-                                          const lbl = stg.replace(/([A-Z])/g, " $1").trim();
-
-                                          return <Fragment key={stg}>
+                                          // Only show % for byte-progress stages; binary stages (total=0) show "Done" or nothing
+                                          const hasByteProgress = info.total > 0;
+                                          const pct = hasByteProgress ? Math.round(info.completed / info.total * 100) : null;
+                                          
+                                          const lbl = stg.replace(/([A-Z])/g, " $1").trim();                                          return <Fragment key={stg}>
 
                                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, minWidth: 0 }}>
 
@@ -3513,7 +3513,14 @@ export default function MigrationPage({ currentUser, p }) {
 
                                               <div style={{ fontSize: 10, marginTop: 3, color: !done && !run && !fail ? p.textMute : clr, fontWeight: run ? 800 : 600, textAlign: "center", lineHeight: 1.2, maxWidth: 80 }}>{lbl}</div>
 
-                                              {pct !== null && <div style={{ fontSize: 9, color: clr, fontWeight: 700, marginTop: 1 }}>{pct}%</div>}
+                                              {pct !== null
+                                                ? <div style={{ fontSize: 9, color: clr, fontWeight: 700, marginTop: 1 }}>{pct}%</div>
+                                                : done
+                                                  ? <div style={{ fontSize: 9, color: "#22c55e", fontWeight: 700, marginTop: 1 }}>Done</div>
+                                                  : run
+                                                    ? <div style={{ fontSize: 9, color: "#3b82f6", fontWeight: 700, marginTop: 1 }}>Running</div>
+                                                    : null
+                                              }
 
                                             </div>
 
