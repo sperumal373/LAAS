@@ -3498,8 +3498,8 @@ export default function MigrationPage({ currentUser, p }) {
                                           const ico = done ? "✓" : run ? "⏳" : fail ? "✗" : "○";
 
                                           // Only show % for byte-progress stages; binary stages (total=0) show "Done" or nothing
-                                          const hasByteProgress = info.total > 0;
-                                          const pct = hasByteProgress ? Math.round(info.completed / info.total * 100) : null;
+                                          // Never show % for completed stages; only show % for byte-progress stages still running
+                                          const pct = (!done && info.total > 0) ? Math.round(info.completed / info.total * 100) : null;
                                           
                                           const lbl = stg.replace(/([A-Z])/g, " $1").trim();                                          return <Fragment key={stg}>
 
