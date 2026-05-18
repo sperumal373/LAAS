@@ -606,6 +606,7 @@ export default function MigrationPage({ currentUser, p }) {
   const [mgAddSel, setMgAddSel] = useState({});
 
   const [mgAddLoading, setMgAddLoading] = useState(false);
+  const [mgAddSearch, setMgAddSearch] = useState("");
 
   const [mgMigrateId, setMgMigrateId] = useState(null);
 
