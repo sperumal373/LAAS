@@ -3175,49 +3175,48 @@ export default function MigrationPage({ currentUser, p }) {
 
                       </div>
 
-                      {mgAddLoading ? <LoadDots p={p} /> : mgAddVMs.length > 0 && (
-
-                        <div style={{ maxHeight: 250, overflow: "auto", borderRadius: 6, border: `1px solid ${p.border}` }}>
-
-                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-
-                            <thead><tr style={{ color: p.textMute, background: p.surface, position: "sticky", top: 0, textAlign: "left" }}>
-
-                              <th style={{ padding: "6px 8px", width: 30 }}><input type="checkbox" onChange={e => { const o = {}; mgAddVMs.forEach(v => o[v.name] = e.target.checked); setMgAddSel(o); }} /></th>
-
-                              <th>VM Name</th><th>OS</th><th>CPU</th><th>Mem</th><th>Power</th>
-
-                            </tr></thead>
-
-                            <tbody>
-
-                              {mgAddVMs.map(vm => (
-
-                                <tr key={vm.name} style={{ borderBottom: `1px solid ${p.border}22`, background: mgAddSel[vm.name] ? `${p.accent}10` : "transparent" }}>
-
-                                  <td style={{ padding: "5px 8px" }}><input type="checkbox" checked={!!mgAddSel[vm.name]} onChange={e => setMgAddSel(s => ({...s, [vm.name]: e.target.checked}))} /></td>
-
-                                  <td style={{ fontWeight: 600, color: p.text }}>{vm.name}</td>
-
-                                  <td style={{ color: p.textMute }}>{vm.guest_os || "—"}</td>
-
-                                  <td>{vm.cpu || "—"}</td>
-
-                                  <td>{vm.memory_mb ? `${(vm.memory_mb/1024).toFixed(1)} GB` : "—"}</td>
-
-                                  <td><span style={{ color: vm.power_state === "poweredOn" ? "#10b981" : "#f59e0b" }}>{vm.power_state === "poweredOn" ? "🟢" : "🔴"}</span></td>
-
-                                </tr>
-
-                              ))}
-
-                            </tbody>
-
-                          </table>
-
-                        </div>
-
-                      )}
+                      {mgAddLoading ? <LoadDots p={p} /> : mgAddVMs.length > 0 && (() => {
+                        const filteredMgVMs = mgAddVMs.filter(v =>
+                          !mgAddSearch ||
+                          v.name?.toLowerCase().includes(mgAddSearch.toLowerCase()) ||
+                          v.guest_os?.toLowerCase().includes(mgAddSearch.toLowerCase()) ||
+                          v.ip?.toLowerCase().includes(mgAddSearch.toLowerCase())
+                        );
+                        return (
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                              <input
+                                value={mgAddSearch}
+                                onChange={e => setMgAddSearch(e.target.value)}
+                                placeholder="🔍 Search VMs by name, OS, IP…"
+                                style={{ flex: 1, padding: "6px 10px", borderRadius: 7, border: `1px solid ${p.border}`, background: p.surface, color: p.text, fontSize: 12.5, outline: "none" }}
+                              />
+                              {mgAddSearch && <button onClick={() => setMgAddSearch("")} style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${p.border}`, background: p.bg, color: p.textMute, fontSize: 11, cursor: "pointer" }}>✕ Clear</button>}
+                              <span style={{ fontSize: 11.5, color: p.textMute, whiteSpace: "nowrap" }}>{filteredMgVMs.length}/{mgAddVMs.length} VMs</span>
+                            </div>
+                            <div style={{ maxHeight: 250, overflow: "auto", borderRadius: 6, border: `1px solid ${p.border}` }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                                <thead><tr style={{ color: p.textMute, background: p.surface, position: "sticky", top: 0, textAlign: "left" }}>
+                                  <th style={{ padding: "6px 8px", width: 30 }}><input type="checkbox" onChange={e => { const o = {}; filteredMgVMs.forEach(v => o[v.name] = e.target.checked); setMgAddSel(o); }} /></th>
+                                  <th>VM Name</th><th>OS</th><th>CPU</th><th>Mem</th><th>Power</th>
+                                </tr></thead>
+                                <tbody>
+                                  {filteredMgVMs.map(vm => (
+                                    <tr key={vm.name} style={{ borderBottom: `1px solid ${p.border}22`, background: mgAddSel[vm.name] ? `${p.accent}10` : "transparent" }}>
+                                      <td style={{ padding: "5px 8px" }}><input type="checkbox" checked={!!mgAddSel[vm.name]} onChange={e => setMgAddSel(s => ({...s, [vm.name]: e.target.checked}))} /></td>
+                                      <td style={{ fontWeight: 600, color: p.text }}>{vm.name}</td>
+                                      <td style={{ color: p.textMute }}>{vm.guest_os || "—"}</td>
+                                      <td>{vm.cpu || "—"}</td>
+                                      <td>{vm.memory_mb ? `${(vm.memory_mb/1024).toFixed(1)} GB` : "—"}</td>
+                                      <td><span style={{ color: vm.power_state === "poweredOn" ? "#10b981" : "#f59e0b" }}>{vm.power_state === "poweredOn" ? "🟢" : "🔴"}</span></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     </div>
 

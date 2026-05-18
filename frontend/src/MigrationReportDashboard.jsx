@@ -11,6 +11,66 @@ const API = (path) => fetch(path, {
   headers: { Authorization: "Bearer " + (getToken() || "") },
 }).then(r => r.json());
 
+// Generate a simple styled HTML string from report data
+function buildReportHTML(report, title) {
+  const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const rows = (report?.vms || []).map(vm =>
+    `<tr><td>${esc(vm.name||vm)}</td><td>${esc(vm.cpu)}</td><td>${vm.memory_mb ? vm.memory_mb+' MB' : '-'}</td><td>${esc(vm.power_state)}</td><td>${esc(vm.ip_address)}</td></tr>`
+  ).join("");
+  const logRows = (report?.event_log || []).map(ev =>
+    `<tr><td style="font-family:monospace;font-size:11px">${esc(ev.ts)}</td><td>${esc(ev.msg)}</td></tr>`
+  ).join("");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+body{font-family:Arial,sans-serif;margin:30px;color:#1e293b;background:#fff}
+h1{font-size:22px;margin-bottom:4px}h2{font-size:15px;margin:20px 0 8px;color:#475569}
+.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;background:#f8fafc;padding:12px;border-radius:8px}
+.stats{display:flex;gap:12px;margin-bottom:16px}
+.stat{background:#f1f5f9;border-radius:8px;padding:10px 18px;text-align:center}
+.stat b{display:block;font-size:22px;font-weight:900}
+.stat span{font-size:11px;color:#64748b}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}
+th{background:#f1f5f9;padding:7px 10px;text-align:left;font-size:12px;color:#64748b}
+td{padding:6px 10px;border-bottom:1px solid #e2e8f0}
+@media print{.no-print{display:none}}
+</style></head><body>
+<h1>📊 ${esc(title)}</h1>
+<p style="color:#64748b;font-size:13px">Generated: ${new Date().toLocaleString()}</p>
+<div class="meta">
+  <div><b>Status:</b> ${esc(report?.status)}</div>
+  <div><b>Target:</b> ${esc(report?.target_platform)}</div>
+  <div><b>Created By:</b> ${esc(report?.created_by)}</div>
+  ${report?.started_at ? `<div><b>Started:</b> ${esc(report.started_at?.slice(0,16))}</div>` : ""}
+  ${report?.completed_at ? `<div><b>Completed:</b> ${esc(report.completed_at?.slice(0,16))}</div>` : ""}
+  ${report?.duration_seconds != null ? `<div><b>Duration:</b> ${Math.ceil(report.duration_seconds/60)} min</div>` : ""}
+</div>
+<div class="stats">
+  <div class="stat"><b>${report?.summary?.total_vms||0}</b><span>Total VMs</span></div>
+  <div class="stat"><b style="color:#10b981">${report?.summary?.succeeded||0}</b><span>Succeeded</span></div>
+  <div class="stat"><b style="color:#ef4444">${report?.summary?.failed||0}</b><span>Failed</span></div>
+  <div class="stat"><b style="color:#f59e0b">${report?.summary?.warnings||0}</b><span>Warnings</span></div>
+</div>
+${rows ? `<h2>VMs Migrated</h2><table><thead><tr><th>Name</th><th>CPU</th><th>Memory</th><th>Power</th><th>IP</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+${logRows ? `<h2>Activity Log</h2><table><thead><tr><th>Timestamp</th><th>Message</th></tr></thead><tbody>${logRows}</tbody></table>` : ""}
+</body></html>`;
+}
+
+function downloadHTML(report, filename) {
+  const html = buildReportHTML(report, filename);
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename.replace(/ /g,"_") + "_report.html";
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function printPDF(report, title) {
+  const html = buildReportHTML(report, title);
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { w.focus(); w.print(); };
+}
+
 const STATUS_COLOR = {
   completed: "#10b981", failed: "#ef4444", cancelled: "#f59e0b",
   executing: "#3b82f6", migrating: "#8b5cf6", planned: "#6b7280",
@@ -81,11 +141,15 @@ function PlanReport({ plan, p }) {
         </div>
         {badge(sc, plan.status?.toUpperCase())}
         <div style={{ fontSize: 14, fontWeight: 900, color: sc, minWidth: 48, textAlign: "right" }}>{plan.progress || 0}%</div>
-        <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
           <button onClick={() => download("json")} title="Download JSON"
             style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${p.border}`, background: p.bg, color: p.textSub, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ JSON</button>
           <button onClick={() => download("csv")} title="Download CSV"
             style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${p.border}`, background: p.bg, color: p.textSub, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ CSV</button>
+          <button onClick={async () => { if (!report) { const r = await API(`/api/migration/plans/${plan.id}/report`); setReport(r); downloadHTML(r, plan.plan_name || "plan"); } else downloadHTML(report, plan.plan_name || "plan"); }} title="Download HTML"
+            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid #06b6d4`, background: "#06b6d410", color: "#06b6d4", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ HTML</button>
+          <button onClick={async () => { if (!report) { const r = await API(`/api/migration/plans/${plan.id}/report`); setReport(r); printPDF(r, plan.plan_name || "plan"); } else printPDF(report, plan.plan_name || "plan"); }} title="Print / Save as PDF"
+            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid #ef4444`, background: "#ef444410", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ PDF</button>
         </div>
       </div>
 
@@ -202,9 +266,13 @@ function MoveGroupReport({ group, p }) {
           <div style={{ fontWeight: 800, fontSize: 14, color: p.text }}>📦 {group.name}</div>
           <div style={{ fontSize: 12, color: p.textMute, marginTop: 2 }}>{group.vm_count || 0} VMs · Created {group.created_at?.slice(0, 16)}</div>
         </div>
-        <div style={{ display: "flex", gap: 6 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
           <button onClick={() => download("json")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${p.border}`, background: p.bg, color: p.textSub, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ JSON</button>
           <button onClick={() => download("csv")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${p.border}`, background: p.bg, color: p.textSub, fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ CSV</button>
+          <button onClick={async () => { if (!report) { const r = await API(`/api/migration/move-groups/${group.id}/report`); setReport(r); downloadHTML(r, group.name || "group"); } else downloadHTML(report, group.name || "group"); }} title="Download HTML"
+            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid #06b6d4`, background: "#06b6d410", color: "#06b6d4", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ HTML</button>
+          <button onClick={async () => { if (!report) { const r = await API(`/api/migration/move-groups/${group.id}/report`); setReport(r); printPDF(r, group.name || "group"); } else printPDF(report, group.name || "group"); }} title="Print / Save as PDF"
+            style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid #ef4444`, background: "#ef444410", color: "#ef4444", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>⬇ PDF</button>
         </div>
       </div>
 
